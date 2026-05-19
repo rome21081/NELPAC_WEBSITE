@@ -81,7 +81,7 @@ function EventsManagement() {
       <label className="md:col-span-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
         <span className="block mb-2" style={{ fontWeight: 700 }}>Event image</span>
         <input type="file" accept="image/*" className="block w-full file:mr-4 file:rounded-xl file:border-0 file:bg-blue-700 file:px-4 file:py-2 file:text-sm file:text-white" onChange={(e) => chooseImage(e.target.files?.[0] || null)} />
-        {imagePreview && <img src={imagePreview} alt="Event preview" className="mt-3 h-40 w-full rounded-xl object-cover" />}
+        {imagePreview && <img src={imagePreview} alt="Event preview" className="mt-3 max-h-72 w-full rounded-xl object-contain bg-slate-100" />}
       </label>
       <textarea className="border rounded-xl px-3 py-2 text-sm md:col-span-2" placeholder="Description" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
       <select className="border rounded-xl px-3 py-2 text-sm" value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}>
@@ -93,7 +93,7 @@ function EventsManagement() {
     </form>
     {events.length === 0 ? <EmptyState label="No events yet." /> : <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {events.map((event) => <div key={event.id} className="bg-white rounded-2xl p-5 border border-slate-100">
-        {event.image_url && <img src={event.image_url} alt={event.title} className="mb-3 h-36 w-full rounded-xl object-cover" />}
+        {event.image_url && <img src={event.image_url} alt={event.title} className="mb-3 max-h-64 w-full rounded-xl object-contain bg-slate-100" />}
         <div className="flex justify-between gap-3"><h2 className="text-slate-900" style={{ fontSize: "16px", fontWeight: 700 }}>{event.title}</h2><span className="text-xs rounded-full bg-slate-100 px-2 py-1">{event.status}</span></div>
         <p className="text-slate-500 text-sm mt-1">{event.event_date} - {event.venue || "No venue"}</p>
         <p className="text-slate-600 text-sm mt-3">{event.description || "No description."}</p>

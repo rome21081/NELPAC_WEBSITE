@@ -201,14 +201,53 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles (id, full_name, email, role)
+  insert into public.profiles (id, full_name, email, contact_number, avatar_url, role)
   values (
     new.id,
     coalesce(new.raw_user_meta_data ->> 'full_name', new.raw_user_meta_data ->> 'name', ''),
     new.email,
+    new.raw_user_meta_data ->> 'contact_number',
+    new.raw_user_meta_data ->> 'avatar_url',
     'user'
   )
   on conflict (id) do nothing;
+
+  if (new.raw_user_meta_data ? 'local_church_id')
+    and (new.raw_user_meta_data ? 'birthday')
+    and coalesce(new.raw_user_meta_data ->> 'name', new.raw_user_meta_data ->> 'full_name', '') <> ''
+  then
+    insert into public.local_church_members (
+      submitted_by,
+      local_church_id,
+      name,
+      birthday,
+      contact_number,
+      gender,
+      address,
+      parent_guardian_name,
+      emergency_contact,
+      professing_member,
+      confirmation_class_year,
+      confirmation_class_status,
+      activity_status
+    )
+    values (
+      new.id,
+      (new.raw_user_meta_data ->> 'local_church_id')::uuid,
+      coalesce(new.raw_user_meta_data ->> 'name', new.raw_user_meta_data ->> 'full_name', ''),
+      (new.raw_user_meta_data ->> 'birthday')::date,
+      new.raw_user_meta_data ->> 'contact_number',
+      nullif(new.raw_user_meta_data ->> 'gender', '')::public.gender_type,
+      new.raw_user_meta_data ->> 'address',
+      new.raw_user_meta_data ->> 'parent_guardian_name',
+      new.raw_user_meta_data ->> 'emergency_contact',
+      coalesce(nullif(new.raw_user_meta_data ->> 'professing_member', ''), 'No')::public.yes_no,
+      nullif(new.raw_user_meta_data ->> 'confirmation_class_year', '')::integer,
+      coalesce(nullif(new.raw_user_meta_data ->> 'confirmation_class_status', ''), 'Not Started')::public.confirmation_class_status,
+      coalesce(nullif(new.raw_user_meta_data ->> 'activity_status', ''), 'Active')::public.member_activity_status
+    )
+    on conflict do nothing;
+  end if;
 
   return new;
 end;

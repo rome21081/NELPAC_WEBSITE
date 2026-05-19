@@ -55,7 +55,7 @@ function UserRewards() {
       {rewards.map((reward) => {
         const canClaim = points >= reward.required_points && reward.stock_quantity > 0;
         return <div key={reward.id} className="bg-white rounded-2xl p-5 border border-slate-100">
-          {reward.image_url ? <img src={reward.image_url} alt={reward.name} className="mb-3 h-36 w-full rounded-xl object-cover bg-slate-100" /> : <RewardPlaceholder />}
+          {reward.image_url ? <img src={reward.image_url} alt={reward.name} className="mb-3 max-h-56 w-full rounded-xl object-contain bg-slate-100" /> : <RewardPlaceholder />}
           <h2 style={{ fontWeight: 700 }}>{reward.name}</h2>
           <p className="text-slate-500 text-sm">{reward.description || "No description"}</p>
           <p className="mt-3 text-sm">{reward.required_points} pts - {reward.stock_quantity} stock</p>

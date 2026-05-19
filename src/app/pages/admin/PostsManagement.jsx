@@ -78,7 +78,7 @@ function PostsManagement() {
       <label className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
         <span className="block mb-2" style={{ fontWeight: 700 }}>Post / activity image</span>
         <input type="file" accept="image/*" className="block w-full file:mr-4 file:rounded-xl file:border-0 file:bg-blue-700 file:px-4 file:py-2 file:text-sm file:text-white" onChange={(e) => chooseImage(e.target.files?.[0] || null)} />
-        {imagePreview && <img src={imagePreview} alt="Post preview" className="mt-3 h-40 w-full rounded-xl object-cover" />}
+        {imagePreview && <img src={imagePreview} alt="Post preview" className="mt-3 max-h-72 w-full rounded-xl object-contain bg-slate-100" />}
       </label>
       <textarea required className="border rounded-xl px-3 py-2 text-sm min-h-28" placeholder="Body" value={form.body} onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))} />
       <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
@@ -91,7 +91,7 @@ function PostsManagement() {
     </form>
     {posts.length === 0 ? <EmptyState label="No posts yet." /> : <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {posts.map((post) => <article key={post.id} className="bg-white rounded-2xl p-5 border border-slate-100">
-        {post.image_url && <img src={post.image_url} alt={post.title} className="mb-3 h-36 w-full rounded-xl object-cover" />}
+        {post.image_url && <img src={post.image_url} alt={post.title} className="mb-3 max-h-64 w-full rounded-xl object-contain bg-slate-100" />}
         <div className="flex justify-between"><h2 className="text-slate-900" style={{ fontWeight: 700 }}>{post.title}</h2><span className="text-xs bg-slate-100 rounded-full px-2 py-1">{post.status}</span></div>
         <p className="text-slate-500 text-xs mt-1">{post.category} - {post.published_at?.slice(0, 10) || "Unpublished"}</p>
         <p className="text-slate-600 text-sm mt-3 line-clamp-3">{post.body}</p>

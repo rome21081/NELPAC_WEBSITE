@@ -85,7 +85,7 @@ function RewardsManagement() {
       <label className="md:col-span-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
         <span className="block mb-2" style={{ fontWeight: 700 }}>Merch / reward image</span>
         <input type="file" accept="image/*" className="block w-full file:mr-4 file:rounded-xl file:border-0 file:bg-blue-700 file:px-4 file:py-2 file:text-sm file:text-white" onChange={(e) => chooseImage(e.target.files?.[0] || null)} />
-        {imagePreview && <img src={imagePreview} alt="Reward preview" className="mt-3 h-40 w-full rounded-xl object-cover" />}
+        {imagePreview && <img src={imagePreview} alt="Reward preview" className="mt-3 max-h-72 w-full rounded-xl object-contain bg-slate-100" />}
       </label>
       <input className="border rounded-xl px-3 py-2 text-sm md:col-span-2" placeholder="Description" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
       <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={form.is_active} onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))} /> Active</label>
@@ -94,7 +94,7 @@ function RewardsManagement() {
     </form>
     {rewards.length === 0 ? <EmptyState label="No rewards yet." /> : <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
       {rewards.map((reward) => <div key={reward.id} className="bg-white rounded-2xl p-5 border border-slate-100">
-        {reward.image_url ? <img src={reward.image_url} alt={reward.name} className="mb-3 h-36 w-full rounded-xl object-cover" /> : <Package className="text-blue-700 mb-3" />}
+        {reward.image_url ? <img src={reward.image_url} alt={reward.name} className="mb-3 max-h-56 w-full rounded-xl object-contain bg-slate-100" /> : <Package className="text-blue-700 mb-3" />}
         <h2 className="text-slate-900" style={{ fontWeight: 700 }}>{reward.name}</h2>
         <p className="text-slate-500 text-sm">{reward.description || "No description"}</p>
         <div className="flex justify-between mt-4 text-sm"><span>{reward.required_points} pts</span><span>{reward.stock_quantity} stock</span><span>{reward.is_active ? "Active" : "Inactive"}</span></div>

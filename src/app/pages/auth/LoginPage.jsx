@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router";
-import { Eye, EyeOff, Shield, Lock, Mail } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../lib/authContext";
+import nelpacLogo from "../../../../NELPAC-LOGO.jpg";
 import {
   listEvents,
   listLocalChurches,
@@ -91,10 +92,9 @@ function LoginPage() {
       >
         <div className="flex items-center gap-3">
           <div
-            className="w-11 h-11 rounded-2xl flex items-center justify-center"
-            style={{ background: "linear-gradient(135deg, #f59e0b, #d97706)" }}
+            className="w-12 h-12 rounded-2xl flex items-center justify-center overflow-hidden bg-white"
           >
-            <Shield className="w-6 h-6 text-white" />
+            <img src={nelpacLogo} alt="NELPAC logo" className="h-full w-full object-contain" />
           </div>
           <div>
             <p
@@ -182,12 +182,9 @@ function LoginPage() {
         <div className="w-full max-w-md">
           <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
             <div
-              className="w-10 h-10 rounded-2xl flex items-center justify-center"
-              style={{
-                background: "linear-gradient(135deg, #f59e0b, #d97706)",
-              }}
+              className="w-11 h-11 rounded-2xl flex items-center justify-center overflow-hidden bg-white"
             >
-              <Shield className="w-5 h-5 text-white" />
+              <img src={nelpacLogo} alt="NELPAC logo" className="h-full w-full object-contain" />
             </div>
             <p
               className="text-white"

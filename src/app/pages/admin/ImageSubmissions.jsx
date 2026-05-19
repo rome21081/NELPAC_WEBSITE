@@ -25,7 +25,7 @@ function ImageSubmissions() {
     <div className="flex gap-2">{["All", "Pending", "Approved", "Rejected"].map((tab) => <button key={tab} onClick={() => setFilter(tab)} className={`px-3 py-2 rounded-xl text-sm ${filter === tab ? "bg-blue-700 text-white" : "bg-white text-slate-600 border border-slate-200"}`}>{tab}</button>)}</div>
     {filtered.length === 0 ? <EmptyState label="No image submissions found." /> : <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
       {filtered.map((image) => <div key={image.id} className="bg-white rounded-2xl overflow-hidden border border-slate-100">
-        <img src={image.image_url} alt={image.caption || "Submitted image"} className="w-full h-56 object-cover bg-slate-100" />
+        <img src={image.image_url} alt={image.caption || "Submitted image"} className="w-full max-h-80 object-contain bg-slate-100" />
         <div className="p-4 space-y-2">
           <div className="flex justify-between"><p className="text-slate-900 text-sm" style={{ fontWeight: 700 }}>{image.caption || "No caption"}</p><span className="text-xs rounded-full bg-slate-100 px-2 py-1">{image.status}</span></div>
           <p className="text-slate-500 text-xs">{image.events?.title || "No event"} · {image.local_churches?.name || "No church"}</p>

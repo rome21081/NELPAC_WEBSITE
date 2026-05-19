@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, Link } from "react-router";
-import { Shield, Upload, ChevronLeft, ChevronRight, Check } from "lucide-react";
+import { Upload, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { getActiveLocalChurchesByDistrict } from "../../lib/localChurches";
-import { createLocalChurchMember } from "../../lib/localChurchMembers";
 import { supabase } from "../../lib/supabaseClient";
+import nelpacLogo from "../../../../NELPAC-LOGO.jpg";
 import {
   updateMyProfile,
   uploadProfileAvatar,
@@ -99,6 +99,9 @@ function RegisterPage() {
       ["emergencyContact", "Emergency contact"],
       ["district", "District"],
       ["localChurchId", "Local church"],
+      ["professingMember", "Professing member"],
+      ["confirmationClassStatus", "Confirmation class status"],
+      ["activityStatus", "Activity status"],
       ["email", "Email"],
       ["password", "Password"],
       ["confirmPassword", "Confirm password"],
@@ -119,7 +122,7 @@ function RegisterPage() {
           "emergencyContact",
         ].includes(missing[0])
           ? 0
-          : ["district", "localChurchId"].includes(missing[0])
+          : ["district", "localChurchId", "professingMember", "confirmationClassStatus", "activityStatus"].includes(missing[0])
           ? 1
           : 2,
       );
@@ -145,13 +148,29 @@ function RegisterPage() {
       const { data, error } = await supabase.auth.signUp({
         email: form.email,
         password: form.password,
-        options: { data: { full_name: form.name } },
+        options: {
+          data: {
+            full_name: form.name,
+            name: form.name,
+            birthday: form.birthday,
+            gender: form.gender,
+            contact_number: form.contactNumber,
+            address: form.address,
+            parent_guardian_name: form.parentGuardianName,
+            emergency_contact: form.emergencyContact,
+            local_church_id: form.localChurchId,
+            professing_member: form.professingMember,
+            confirmation_class_year: form.confirmationClassYear,
+            confirmation_class_status: form.confirmationClassStatus,
+            activity_status: form.activityStatus,
+          },
+        },
       });
       if (error) throw error;
 
       if (!data.session) {
         setMessage(
-          "Account created. Please confirm your email, then sign in to submit your member application.",
+          "Account and member application created. Please confirm your email, then sign in.",
         );
         return;
       }
@@ -166,7 +185,6 @@ function RegisterPage() {
         contact_number: form.contactNumber,
         avatar_url: avatarUrl,
       });
-      await createLocalChurchMember(form, data.user.id);
       navigate("/");
     } catch (error) {
       setMessage(error.message || "Unable to submit registration.");
@@ -189,6 +207,9 @@ function RegisterPage() {
       [
         ["district", "District"],
         ["localChurchId", "Local church"],
+        ["professingMember", "Professing member"],
+        ["confirmationClassStatus", "Confirmation class status"],
+        ["activityStatus", "Activity status"],
       ],
       [
         ["email", "Email"],
@@ -231,10 +252,9 @@ function RegisterPage() {
       <div className="w-full max-w-lg">
         <div className="flex items-center justify-center gap-3 mb-6">
           <div
-            className="w-10 h-10 rounded-2xl flex items-center justify-center"
-            style={{ background: "linear-gradient(135deg, #f59e0b, #d97706)" }}
+            className="w-11 h-11 rounded-2xl flex items-center justify-center overflow-hidden bg-white"
           >
-            <Shield className="w-5 h-5 text-white" />
+            <img src={nelpacLogo} alt="NELPAC logo" className="h-full w-full object-contain" />
           </div>
           <div>
             <p
@@ -394,41 +414,56 @@ function RegisterPage() {
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <select
-                  className={inputClass}
-                  value={form.gender}
-                  onChange={(e) => update("gender", e.target.value)}
-                >
-                  <option value="">Select gender</option>
-                  <option>Male</option>
-                  <option>Female</option>
-                  <option>Prefer not to say</option>
-                </select>
+                <div>
+                  <label className={labelClass} style={{ fontSize: "13px", fontWeight: 600 }}>Gender *</label>
+                  <select
+                    className={inputClass}
+                    value={form.gender}
+                    onChange={(e) => update("gender", e.target.value)}
+                  >
+                    <option value="">Select gender</option>
+                    <option>Male</option>
+                    <option>Female</option>
+                    <option>Prefer not to say</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={labelClass} style={{ fontSize: "13px", fontWeight: 600 }}>Contact number *</label>
+                  <input
+                    className={inputClass}
+                    placeholder="Contact number"
+                    value={form.contactNumber}
+                    onChange={(e) => update("contactNumber", e.target.value)}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className={labelClass} style={{ fontSize: "13px", fontWeight: 600 }}>Address *</label>
                 <input
                   className={inputClass}
-                  placeholder="Contact number"
-                  value={form.contactNumber}
-                  onChange={(e) => update("contactNumber", e.target.value)}
+                  placeholder="Purok/Street, Barangay, City/Municipality"
+                  value={form.address}
+                  onChange={(e) => update("address", e.target.value)}
                 />
               </div>
-              <input
-                className={inputClass}
-                placeholder="Purok/Street, Barangay, City/Municipality"
-                value={form.address}
-                onChange={(e) => update("address", e.target.value)}
-              />
-              <input
-                className={inputClass}
-                placeholder="Parent or guardian name"
-                value={form.parentGuardianName}
-                onChange={(e) => update("parentGuardianName", e.target.value)}
-              />
-              <input
-                className={inputClass}
-                placeholder="Emergency contact"
-                value={form.emergencyContact}
-                onChange={(e) => update("emergencyContact", e.target.value)}
-              />
+              <div>
+                <label className={labelClass} style={{ fontSize: "13px", fontWeight: 600 }}>Parent/guardian name *</label>
+                <input
+                  className={inputClass}
+                  placeholder="Parent or guardian name"
+                  value={form.parentGuardianName}
+                  onChange={(e) => update("parentGuardianName", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className={labelClass} style={{ fontSize: "13px", fontWeight: 600 }}>Emergency contact *</label>
+                <input
+                  className={inputClass}
+                  placeholder="Emergency contact"
+                  value={form.emergencyContact}
+                  onChange={(e) => update("emergencyContact", e.target.value)}
+                />
+              </div>
             </div>
           )}
 

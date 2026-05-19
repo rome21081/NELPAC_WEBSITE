@@ -18,7 +18,7 @@ function UserEvents() {
     <ErrorState message={error} />
     {visible.length === 0 ? <EmptyState label="No published events." /> : <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {visible.map((event) => <div key={event.id} className="bg-white rounded-2xl p-5 border border-slate-100">
-        {event.image_url ? <img src={event.image_url} alt={event.title} className="mb-3 h-40 w-full rounded-xl object-cover bg-slate-100" /> : <ImagePlaceholder label="No event image" />}
+        {event.image_url ? <img src={event.image_url} alt={event.title} className="mb-3 max-h-72 w-full rounded-xl object-contain bg-slate-100" /> : <ImagePlaceholder label="No event image" />}
         <h2 style={{ fontWeight: 700 }}>{event.title}</h2>
         <p className="text-slate-500 text-sm">{event.event_date} - {event.venue || "No venue"}</p>
         <p className="text-slate-600 text-sm mt-3">{event.description || "No description."}</p>

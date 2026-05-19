@@ -15,13 +15,13 @@ import {
   Users,
   Upload,
   Menu,
-  ChevronDown,
-  Shield
+  ChevronDown
 } from "lucide-react";
 import { LoadingState } from "./DataState";
 import { useAuth } from "../lib/authContext";
 import { useSupabaseData } from "../lib/useSupabaseData";
 import { getMyMembers, listNotifications, listPointBalances, markNotificationRead } from "../lib/supabaseServices";
+import nelpacLogo from "../../../NELPAC-LOGO.jpg";
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/user" },
   { icon: User, label: "My Profile", path: "/user/profile" },
@@ -100,8 +100,8 @@ function UserLayout() {
     /* Logo */
   }
         <div className="flex items-center gap-3 px-5 py-5 border-b border-white/10">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "linear-gradient(135deg, #10b981, #059669)" }}>
-            <Shield className="w-5 h-5 text-white" />
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden bg-white">
+            <img src={nelpacLogo} alt="NELPAC logo" className="h-full w-full object-contain" />
           </div>
           <div>
             <p className="text-white text-sm leading-none" style={{ fontWeight: 700 }}>NELPAC</p>
@@ -121,7 +121,7 @@ function UserLayout() {
   }
         <div className="mx-4 mt-3 p-3 rounded-xl" style={{ background: "rgba(255,255,255,0.06)" }}>
           <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0" style={{ background: "linear-gradient(135deg, #10b981, #3b82f6)", fontWeight: 700 }}>{initials}</div>
+            <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0 overflow-hidden bg-slate-700" style={{ background: profile.avatar_url ? "#f1f5f9" : "linear-gradient(135deg, #10b981, #3b82f6)", fontWeight: 700 }}>{profile.avatar_url ? <img src={profile.avatar_url} alt="Profile" className="h-full w-full object-contain" /> : initials}</div>
             <div className="min-w-0">
               <p className="text-white text-sm truncate leading-tight" style={{ fontWeight: 600 }}>{profile.full_name || profile.email}</p>
               <p className="text-emerald-400 leading-tight" style={{ fontSize: "10px" }}>{member?.local_church_name || "Member"}</p>
@@ -212,7 +212,7 @@ function UserLayout() {
     onClick={() => setProfileOpen(!profileOpen)}
     className="flex items-center gap-2 hover:bg-slate-100 rounded-xl px-2 py-1.5 transition-colors"
   >
-                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm" style={{ background: "linear-gradient(135deg, #10b981, #3b82f6)", fontWeight: 700 }}>{initials}</div>
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm overflow-hidden bg-slate-100" style={{ background: profile.avatar_url ? "#f1f5f9" : "linear-gradient(135deg, #10b981, #3b82f6)", fontWeight: 700 }}>{profile.avatar_url ? <img src={profile.avatar_url} alt="Profile" className="h-full w-full object-contain" /> : initials}</div>
                 <div className="hidden sm:block text-left">
                   <p className="text-slate-800 text-sm leading-none" style={{ fontWeight: 600 }}>{profile.full_name || profile.email}</p>
                   <p className="text-slate-400 leading-none mt-0.5" style={{ fontSize: "11px" }}>Youth Portal</p>

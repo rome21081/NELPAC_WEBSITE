@@ -96,7 +96,7 @@ function UserProfile() {
       <form onSubmit={save} className="grid grid-cols-1 lg:grid-cols-4 gap-5">
         <div className="flex flex-col items-center text-center">
           <div className="h-24 w-24 overflow-hidden rounded-2xl bg-slate-100 flex items-center justify-center text-slate-500" style={{ fontSize: "32px", fontWeight: 800 }}>
-            {form.avatar_url ? <img src={form.avatar_url} alt="Profile" className="h-full w-full object-cover" /> : (profile.full_name || profile.email || "U").charAt(0).toUpperCase()}
+            {form.avatar_url ? <img src={form.avatar_url} alt="Profile" className="h-full w-full object-contain" /> : (profile.full_name || profile.email || "U").charAt(0).toUpperCase()}
           </div>
           {editing && <input type="file" accept="image/*" onChange={(e) => setForm((f) => ({ ...f, avatarFile: e.target.files?.[0] || null }))} className="mt-3 block w-full text-xs text-slate-600" />}
         </div>
@@ -134,7 +134,7 @@ function UserProfile() {
           ["Emergency contact", member.emergency_contact],
           ["Parent/guardian", member.parent_guardian_name],
           ["Professing member", member.professing_member],
-          ["Confirmation", `${member.confirmation_class_year || "No year"} · ${member.confirmation_class_status}`],
+          ["Confirmation", `${member.confirmation_class_year || "No year"} - ${member.confirmation_class_status}`],
           ["Activity status", member.activity_status],
           ["Review status", member.review_status],
         ].map(([label, value]) => <div key={label}><p className="text-slate-400 text-xs">{label}</p><p className="text-slate-800">{value || "-"}</p></div>)}
