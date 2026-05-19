@@ -49,6 +49,7 @@ function EventsManagement() {
     setSaving(true);
     setMessage("");
     try {
+      if (imageFile) setMessage("Compressing and uploading event image...");
       const imageUrl = imageFile ? await uploadStorageImage("event-images", imageFile, "events", profile.id) : form.image_url;
       await saveEvent({ ...form, image_url: imageUrl || null, created_by: form.created_by || profile.id });
       const wasEditing = Boolean(form.id);
@@ -66,6 +67,21 @@ function EventsManagement() {
   const submit = (event) => {
     event.preventDefault();
     setConfirmOpen(true);
+  };
+
+  const toggleEvaluation = async (eventRecord) => {
+    setMessage("");
+    setSaving(true);
+    try {
+      const { local_churches: _localChurch, ...eventPayload } = eventRecord;
+      await saveEvent({ ...eventPayload, evaluation_enabled: !eventRecord.evaluation_enabled });
+      await reload();
+      setMessage(eventRecord.evaluation_enabled ? "Evaluation closed for this event." : "Evaluation opened for this event.");
+    } catch (err) {
+      setMessage(err.message || "Unable to update evaluation status.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) return <LoadingState label="Loading events..." />;
@@ -97,7 +113,10 @@ function EventsManagement() {
         <div className="flex justify-between gap-3"><h2 className="text-slate-900" style={{ fontSize: "16px", fontWeight: 700 }}>{event.title}</h2><span className="text-xs rounded-full bg-slate-100 px-2 py-1">{event.status}</span></div>
         <p className="text-slate-500 text-sm mt-1">{event.event_date} - {event.venue || "No venue"}</p>
         <p className="text-slate-600 text-sm mt-3">{event.description || "No description."}</p>
-        <button onClick={() => editEvent(event)} className="mt-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm"><Edit2 style={{ width: 14, height: 14 }} /> Edit</button>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button onClick={() => editEvent(event)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm"><Edit2 style={{ width: 14, height: 14 }} /> Edit</button>
+          <button disabled={saving} onClick={() => toggleEvaluation(event)} className={`rounded-xl px-3 py-2 text-sm ${event.evaluation_enabled ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{event.evaluation_enabled ? "Evaluation Open" : "Evaluation Closed"}</button>
+        </div>
       </div>)}
     </div>}
     {confirmOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Gift } from "lucide-react";
 import { EmptyState, ErrorState, LoadingState } from "../../components/DataState";
+import { ImageLightbox } from "../../components/ImageLightbox";
 import { useAuth } from "../../lib/authContext";
 import { useSupabaseData } from "../../lib/useSupabaseData";
 import { listPointBalances, listRewardClaims, listRewards, submitRewardClaim } from "../../lib/supabaseServices";
@@ -27,6 +28,7 @@ function UserRewards() {
   }, [user?.id]);
   const [message, setMessage] = useState("");
   const [claiming, setClaiming] = useState("");
+  const [viewer, setViewer] = useState(null);
 
   if (loading) return <LoadingState label="Loading rewards..." />;
   const { rewards = [], balances = [], claims = [] } = data[0] || {};
@@ -55,7 +57,7 @@ function UserRewards() {
       {rewards.map((reward) => {
         const canClaim = points >= reward.required_points && reward.stock_quantity > 0;
         return <div key={reward.id} className="bg-white rounded-2xl p-5 border border-slate-100">
-          {reward.image_url ? <img src={reward.image_url} alt={reward.name} className="mb-3 max-h-56 w-full rounded-xl object-contain bg-slate-100" /> : <RewardPlaceholder />}
+          {reward.image_url ? <button type="button" onClick={() => setViewer({ src: reward.image_url, alt: reward.name })} className="mb-3 block w-full rounded-xl bg-slate-100"><img src={reward.image_url} alt={reward.name} className="max-h-56 w-full rounded-xl object-contain" /></button> : <RewardPlaceholder />}
           <h2 style={{ fontWeight: 700 }}>{reward.name}</h2>
           <p className="text-slate-500 text-sm">{reward.description || "No description"}</p>
           <p className="mt-3 text-sm">{reward.required_points} pts - {reward.stock_quantity} stock</p>
@@ -64,6 +66,7 @@ function UserRewards() {
       })}
     </div>}
     <section className="bg-white rounded-2xl p-5 border border-slate-100"><h2 className="mb-3" style={{ fontWeight: 700 }}>Claim History</h2>{myClaims.length === 0 ? <EmptyState label="No claims yet." /> : myClaims.map((claim) => <div key={claim.id} className="flex justify-between border-b border-slate-50 py-2 text-sm"><span>{claim.reward_name}</span><span>{claim.claim_status}</span></div>)}</section>
+    <ImageLightbox image={viewer} onClose={() => setViewer(null)} />
   </div>;
 }
 

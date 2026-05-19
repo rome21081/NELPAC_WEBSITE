@@ -20,6 +20,7 @@ function friendlyEvaluationError(error) {
   if (error?.code === "23505" || message.toLowerCase().includes("duplicate key") || message.toLowerCase().includes("event_evaluations_one_per_user")) {
     return "You already evaluated this event.";
   }
+  if (message.includes("not available for evaluation")) return "Evaluation is currently closed for this event.";
   return message || "Unable to submit evaluation.";
 }
 
@@ -28,12 +29,18 @@ function UserEvaluation() {
   const [form, setForm] = useState({ event_id: "", overall_rating: 5, speaker_rating: 5, venue_rating: 5, program_rating: 5, comment: "" });
   const [message, setMessage] = useState("");
   const [success, setSuccess] = useState("");
-  const available = events.filter((event) => ["Published", "Completed"].includes(event.status) && event.evaluation_enabled);
+  const eligible = events.filter((event) => ["Published", "Completed"].includes(event.status));
+  const selectedEvent = eligible.find((event) => event.id === form.event_id);
+  const evaluationClosed = selectedEvent && !selectedEvent.evaluation_enabled;
 
   const submit = async (event) => {
     event.preventDefault();
     setMessage("");
     setSuccess("");
+    if (evaluationClosed) {
+      setMessage("Evaluation is currently closed for this event.");
+      return;
+    }
     try {
       await submitEvaluation(form);
       setSuccess("Evaluation submitted. Thank you for your feedback.");
@@ -51,11 +58,12 @@ function UserEvaluation() {
     </div>
     <ErrorState message={error || message} />
     {success && <p className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-700">{success}</p>}
-    {available.length === 0 ? <EmptyState label="No events are open for evaluation." /> : <form onSubmit={submit} className="bg-white rounded-2xl p-5 border border-slate-100 space-y-4">
+    {eligible.length === 0 ? <EmptyState label="No events are available for evaluation." /> : <form onSubmit={submit} className="bg-white rounded-2xl p-5 border border-slate-100 space-y-4">
       <select required value={form.event_id} onChange={(e) => setForm((f) => ({ ...f, event_id: e.target.value }))} className="w-full border rounded-xl px-3 py-2 text-sm">
         <option value="">Select event</option>
-        {available.map((event) => <option key={event.id} value={event.id}>{event.title}</option>)}
+        {eligible.map((event) => <option key={event.id} value={event.id}>{event.title}{event.evaluation_enabled ? "" : " (Closed)"}</option>)}
       </select>
+      {evaluationClosed && <p className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700">Evaluation is currently closed for this event.</p>}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <StarRating label="Overall rating" value={form.overall_rating} onChange={(value) => setForm((f) => ({ ...f, overall_rating: value }))} />
         <StarRating label="Speaker rating" value={form.speaker_rating} onChange={(value) => setForm((f) => ({ ...f, speaker_rating: value }))} />
@@ -63,7 +71,7 @@ function UserEvaluation() {
         <StarRating label="Program rating" value={form.program_rating} onChange={(value) => setForm((f) => ({ ...f, program_rating: value }))} />
       </div>
       <textarea className="w-full border rounded-xl px-3 py-2 text-sm" placeholder="Comment" value={form.comment} onChange={(e) => setForm((f) => ({ ...f, comment: e.target.value }))} />
-      <button className="rounded-xl bg-blue-700 text-white px-4 py-2 text-sm">Submit Evaluation</button>
+      <button disabled={evaluationClosed} className="rounded-xl bg-blue-700 text-white px-4 py-2 text-sm disabled:bg-slate-200 disabled:text-slate-500">Submit Evaluation</button>
     </form>}
   </div>;
 }

@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { QrCode } from "lucide-react";
 import { EmptyState, ErrorState, LoadingState } from "../../components/DataState";
 import { useAuth } from "../../lib/authContext";
 import { useSupabaseData } from "../../lib/useSupabaseData";
 import { getMyMembers, listOneCardRedeemCodes, listPointBalances, listPointLedger, listRedeemCodes, redeemOneCardCode } from "../../lib/supabaseServices";
+import nelpacLogo from "../../../../NELPAC-LOGO.jpg";
 
 function getRedeemCodeMessage(error) {
   const message = error?.message || "";
@@ -59,7 +61,21 @@ function UserOneCard() {
   const points = balances.find((balance) => balance.user_id === user.id)?.points_balance || 0;
   return <div className="space-y-5">
     <ErrorState message={error} />
-    <section className="rounded-2xl p-6 text-white" style={{ background: "linear-gradient(135deg, #0f172a, #2563eb)" }}><p className="text-blue-200 text-sm">NELPAC One Card</p><h1 style={{ fontSize: "28px", fontWeight: 900 }}>{points.toLocaleString()} pts</h1><p className="mt-3">{profile.full_name || profile.email}</p><p className="text-blue-200 text-sm">{member?.local_church_name || "No member record"}</p></section>
+    <section className="relative overflow-hidden rounded-2xl p-6 text-white shadow-xl" style={{ background: "linear-gradient(135deg, #07142f 0%, #1d4ed8 58%, #0f766e 100%)" }}>
+      <img src={nelpacLogo} alt="" aria-hidden="true" className="pointer-events-none absolute -right-8 -top-10 h-56 w-56 object-contain opacity-10 mix-blend-screen" />
+      <div className="relative flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p className="text-blue-100 text-sm tracking-wide">NELPAC One Card</p>
+          <h1 className="mt-2" style={{ fontSize: "40px", fontWeight: 900 }}>{points.toLocaleString()} pts</h1>
+          <p className="mt-4 text-lg" style={{ fontWeight: 800 }}>{profile.full_name || profile.email}</p>
+          <p className="text-blue-100 text-sm">{member?.local_church_name || "No member record"}</p>
+        </div>
+        <div className="flex h-24 w-24 shrink-0 flex-col items-center justify-center rounded-2xl bg-white/95 text-slate-900 shadow-lg">
+          <QrCode style={{ width: 44, height: 44 }} />
+          <p className="mt-1 text-[10px] font-bold tracking-widest">ONE CARD</p>
+        </div>
+      </div>
+    </section>
     <section className="bg-white rounded-2xl p-5 border border-slate-100">
       <h2 className="mb-3" style={{ fontWeight: 700 }}>Redeem One Card Code</h2>
       <form onSubmit={submitRedeemCode} className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">

@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 import { LoadingState } from "./DataState";
 import { useAuth } from "../lib/authContext";
+import { useSupabaseData } from "../lib/useSupabaseData";
+import { listNotifications, markNotificationRead } from "../lib/supabaseServices";
 import nelpacLogo from "../../../NELPAC-LOGO.jpg";
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/admin" },
@@ -38,12 +40,15 @@ function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationError, setNotificationError] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
   const isActive = (path) => {
     if (path === "/admin") return location.pathname === "/admin";
     return location.pathname.startsWith(path);
   };
+  const { data: notifications, reload: reloadNotifications } = useSupabaseData(() => profile?.role === "admin" ? listNotifications() : Promise.resolve([]), [profile?.role]);
   if (loading) return <LoadingState label="Checking admin session..." />;
   if (!profile) {
     navigate("/");
@@ -53,10 +58,20 @@ function AdminLayout() {
     navigate("/user");
     return null;
   }
+  const unreadCount = notifications.filter((notification) => !notification.is_read).length;
   const initials = (profile.full_name || profile.email || "A").charAt(0).toUpperCase();
   const logout = async () => {
     await signOut();
     navigate("/");
+  };
+  const markRead = async (notificationId) => {
+    setNotificationError("");
+    try {
+      await markNotificationRead(notificationId);
+      await reloadNotifications();
+    } catch {
+      setNotificationError("Unable to mark notification as read.");
+    }
   };
   return <div className="flex h-screen bg-slate-100 overflow-hidden">
       {
@@ -174,10 +189,21 @@ function AdminLayout() {
             {
     /* Notifications */
   }
-            <button className="relative w-9 h-9 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors">
+            <div className="relative">
+            <button onClick={() => setNotificationsOpen((open) => !open)} className="relative w-9 h-9 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors">
               <Bell style={{ width: 20, height: 20 }} />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500" />
+              {unreadCount > 0 && <span className="absolute -top-1 -right-1 min-w-5 h-5 rounded-full bg-red-500 px-1 text-center text-white" style={{ fontSize: "11px", fontWeight: 700 }}>{unreadCount > 9 ? "9+" : unreadCount}</span>}
             </button>
+            {notificationsOpen && <div className="absolute right-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white py-2 shadow-lg z-50">
+              <div className="px-4 py-2 border-b border-slate-100"><p className="text-sm text-slate-800" style={{ fontWeight: 700 }}>Notifications</p>{notificationError && <p className="mt-1 text-xs text-red-600">{notificationError}</p>}</div>
+              <div className="max-h-96 overflow-y-auto">
+                {notifications.length === 0 ? <p className="px-4 py-5 text-sm text-slate-500">No notifications yet.</p> : notifications.slice(0, 12).map((notification) => <button key={notification.id} onClick={() => markRead(notification.id)} className={`block w-full border-b border-slate-50 px-4 py-3 text-left hover:bg-slate-50 ${notification.is_read ? "bg-white" : "bg-amber-50/60"}`}>
+                  <div className="flex justify-between gap-3"><p className="text-sm text-slate-800" style={{ fontWeight: notification.is_read ? 600 : 800 }}>{notification.title}</p><span className="text-[10px] text-slate-400">{notification.created_at?.slice(0, 10)}</span></div>
+                  <p className="mt-1 text-xs text-slate-500">{notification.message}</p>
+                </button>)}
+              </div>
+            </div>}
+            </div>
 
             {
     /* Profile */

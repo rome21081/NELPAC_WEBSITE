@@ -11,6 +11,35 @@ async function runQuery(query) {
   return data || [];
 }
 
+async function compressImageFile(file, { maxWidth = 1600, maxHeight = 1600, quality = 0.82 } = {}) {
+  if (!file?.type?.startsWith("image/") || file.type === "image/gif") return file;
+
+  const imageUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const img = new window.Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = imageUrl;
+    });
+
+    const ratio = Math.min(maxWidth / image.width, maxHeight / image.height, 1);
+    const width = Math.round(image.width * ratio);
+    const height = Math.round(image.height * ratio);
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    context.drawImage(image, 0, 0, width, height);
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+    if (!blob || blob.size >= file.size) return file;
+    return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
+}
+
 async function listProfiles() {
   return runQuery(requireSupabase().from("profiles").select("*").order("created_at", { ascending: false }));
 }
@@ -120,9 +149,10 @@ async function listImageSubmissions() {
 
 async function uploadImageSubmission({ file, caption, event_id, local_church_id, userId }) {
   const client = requireSupabase();
-  const extension = file.name.split(".").pop();
+  const uploadFile = await compressImageFile(file);
+  const extension = uploadFile.name.split(".").pop();
   const path = `image-submissions/${userId}/${Date.now()}.${extension}`;
-  const { error: uploadError } = await client.storage.from("nelpac-images").upload(path, file, { upsert: false });
+  const { error: uploadError } = await client.storage.from("nelpac-images").upload(path, uploadFile, { upsert: false, contentType: uploadFile.type });
   if (uploadError) {
     if (uploadError.message?.toLowerCase().includes("bucket not found")) {
       throw new Error("Storage bucket not found. Create a public Supabase Storage bucket named nelpac-images, then try again.");
@@ -148,10 +178,11 @@ async function uploadImageSubmission({ file, caption, event_id, local_church_id,
 
 async function uploadStorageImage(bucket, file, folder, userId) {
   const client = requireSupabase();
-  const extension = file.name.split(".").pop();
+  const uploadFile = await compressImageFile(file);
+  const extension = uploadFile.name.split(".").pop();
   const safeFolder = folder || "uploads";
   const path = `${safeFolder}/${userId}/${Date.now()}.${extension}`;
-  const { error } = await client.storage.from(bucket).upload(path, file, { upsert: false });
+  const { error } = await client.storage.from(bucket).upload(path, uploadFile, { upsert: false, contentType: uploadFile.type });
   if (error) {
     if (error.message?.toLowerCase().includes("bucket not found")) {
       throw new Error(`Storage bucket not found. Create a Supabase Storage bucket named ${bucket}, then try again.`);
@@ -321,9 +352,10 @@ async function updateMyProfile(payload) {
 
 async function uploadProfileAvatar(file, userId) {
   const client = requireSupabase();
-  const extension = file.name.split(".").pop();
+  const uploadFile = await compressImageFile(file, { maxWidth: 900, maxHeight: 900, quality: 0.85 });
+  const extension = uploadFile.name.split(".").pop();
   const path = `avatars/${userId}/${Date.now()}.${extension}`;
-  const { error } = await client.storage.from("nelpac-images").upload(path, file, { upsert: true });
+  const { error } = await client.storage.from("nelpac-images").upload(path, uploadFile, { upsert: true, contentType: uploadFile.type });
   if (error) {
     if (error.message?.toLowerCase().includes("bucket not found")) {
       throw new Error("Storage bucket not found. Create a public Supabase Storage bucket named nelpac-images, then try again.");
@@ -346,6 +378,7 @@ async function setUserRole(userId, role) {
 export {
   createMember,
   createPointsEntry,
+  compressImageFile,
   getMyMembers,
   listAuditLogs,
   listEvents,

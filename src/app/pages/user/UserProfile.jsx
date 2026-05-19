@@ -15,6 +15,7 @@ function UserProfile() {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ full_name: "", contact_number: "", avatar_url: "", avatarFile: null });
   const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ password: "", confirmPassword: "" });
 
   useEffect(() => {
@@ -45,9 +46,13 @@ function UserProfile() {
   const save = async (event) => {
     event.preventDefault();
     setMessage("");
+    setSaving(true);
     try {
       let avatarUrl = form.avatar_url;
-      if (form.avatarFile) avatarUrl = await uploadProfileAvatar(form.avatarFile, user.id);
+      if (form.avatarFile) {
+        setMessage("Compressing and uploading profile photo...");
+        avatarUrl = await uploadProfileAvatar(form.avatarFile, user.id);
+      }
       await updateMyProfile({
         full_name: form.full_name,
         contact_number: form.contact_number,
@@ -58,6 +63,8 @@ function UserProfile() {
       setMessage("Profile updated.");
     } catch (err) {
       setMessage(err.message || "Unable to update profile.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -115,7 +122,7 @@ function UserProfile() {
             <p className="text-blue-100 text-xs">NELPAC One Card Balance</p>
             <p style={{ fontSize: "34px", fontWeight: 900 }}>{points.toLocaleString()} pts</p>
           </div>
-          {editing && <button className="md:col-span-2 flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm text-white"><Save style={{ width: 14, height: 14 }} /> Save Profile Changes</button>}
+          {editing && <button disabled={saving} className="md:col-span-2 flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm text-white disabled:opacity-60"><Save style={{ width: 14, height: 14 }} /> {saving ? "Saving..." : "Save Profile Changes"}</button>}
         </div>
       </form>
     </section>

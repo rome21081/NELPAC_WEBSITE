@@ -48,6 +48,7 @@ function RewardsManagement() {
     setSaving(true);
     setMessage("");
     try {
+      if (imageFile) setMessage("Compressing and uploading reward image...");
       const imageUrl = imageFile ? await uploadStorageImage("reward-images", imageFile, "rewards", profile.id) : form.image_url;
       await saveReward({
         ...form,

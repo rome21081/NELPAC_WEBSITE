@@ -14,6 +14,7 @@ function SubmitImage() {
   const [form, setForm] = useState({ event_id: "", caption: "", file: null });
   const [message, setMessage] = useState("");
   const [success, setSuccess] = useState("");
+  const [uploading, setUploading] = useState(false);
 
   if (loading) return <LoadingState label="Loading upload form..." />;
   const { events = [], members = [] } = data[0] || {};
@@ -27,6 +28,8 @@ function SubmitImage() {
       setMessage("Please choose an image file.");
       return;
     }
+    setUploading(true);
+    setMessage("Compressing and uploading image...");
     try {
       await uploadImageSubmission({
         file: form.file,
@@ -38,8 +41,11 @@ function SubmitImage() {
       setForm({ event_id: "", caption: "", file: null });
       event.target.reset();
       setSuccess("Image submitted for review. Status is Pending until an admin approves it.");
+      setMessage("");
     } catch (err) {
       setMessage(err.message || "Unable to submit image.");
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -62,7 +68,7 @@ function SubmitImage() {
         {events.map((event) => <option key={event.id} value={event.id}>{event.title}</option>)}
       </select>
       <textarea className="w-full border rounded-xl px-3 py-2 text-sm" placeholder="Caption" value={form.caption} onChange={(e) => setForm((f) => ({ ...f, caption: e.target.value }))} />
-      <button className="flex items-center gap-2 rounded-xl bg-blue-700 text-white px-4 py-2 text-sm"><Upload style={{ width: 14, height: 14 }} /> Submit Image</button>
+      <button disabled={uploading} className="flex items-center gap-2 rounded-xl bg-blue-700 text-white px-4 py-2 text-sm disabled:opacity-60"><Upload style={{ width: 14, height: 14 }} /> {uploading ? "Uploading..." : "Submit Image"}</button>
     </form>
   </div>;
 }

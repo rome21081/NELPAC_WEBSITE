@@ -177,6 +177,7 @@ function RegisterPage() {
 
       let avatarUrl = null;
       if (form.profilePhoto) {
+        setMessage("Compressing and uploading profile photo...");
         avatarUrl = await uploadProfileAvatar(form.profilePhoto, data.user.id);
       }
 

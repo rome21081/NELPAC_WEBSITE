@@ -49,6 +49,7 @@ function PostsManagement() {
     setSaving(true);
     setMessage("");
     try {
+      if (imageFile) setMessage("Compressing and uploading post image...");
       const imageUrl = imageFile ? await uploadStorageImage("post-images", imageFile, "posts", profile.id) : form.image_url;
       await savePost({ ...form, image_url: imageUrl || null, created_by: form.created_by || profile.id });
       const wasEditing = Boolean(form.id);

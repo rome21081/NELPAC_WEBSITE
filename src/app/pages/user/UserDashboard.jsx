@@ -44,14 +44,14 @@ function UserDashboard() {
       <section className="bg-white rounded-2xl p-5 border border-slate-100">
         <h2 className="mb-3" style={{ fontWeight: 700 }}>Upcoming Events</h2>
         {visibleEvents.slice(0, 5).length === 0 ? <EmptyState label="No upcoming events." /> : visibleEvents.slice(0, 5).map((event) => <div key={event.id} className="flex gap-3 border-b border-slate-50 py-2 text-sm">
-          {event.image_url ? <img src={event.image_url} alt={event.title} className="h-12 w-16 rounded-lg object-cover bg-slate-100" /> : <div className="flex h-12 w-16 items-center justify-center rounded-lg bg-slate-100 text-slate-400"><Calendar style={{ width: 16, height: 16 }} /></div>}
+          {event.image_url ? <img src={event.image_url} alt={event.title} className="h-12 w-16 rounded-lg object-contain bg-slate-100" /> : <div className="flex h-12 w-16 items-center justify-center rounded-lg bg-slate-100 text-slate-400"><Calendar style={{ width: 16, height: 16 }} /></div>}
           <div><b>{event.title}</b><p className="text-slate-500">{event.event_date} - {event.venue || "No venue"}</p></div>
         </div>)}
       </section>
       <section className="bg-white rounded-2xl p-5 border border-slate-100">
         <h2 className="mb-3" style={{ fontWeight: 700 }}>Latest Posts</h2>
         {posts.slice(0, 5).length === 0 ? <EmptyState label="No posts yet." /> : posts.slice(0, 5).map((post) => <div key={post.id} className="flex gap-3 border-b border-slate-50 py-2 text-sm">
-          {post.image_url ? <img src={post.image_url} alt={post.title} className="h-12 w-16 rounded-lg object-cover bg-slate-100" /> : <div className="flex h-12 w-16 items-center justify-center rounded-lg bg-slate-100 text-slate-400"><FileText style={{ width: 16, height: 16 }} /></div>}
+          {post.image_url ? <img src={post.image_url} alt={post.title} className="h-12 w-16 rounded-lg object-contain bg-slate-100" /> : <div className="flex h-12 w-16 items-center justify-center rounded-lg bg-slate-100 text-slate-400"><FileText style={{ width: 16, height: 16 }} /></div>}
           <div><b>{post.title}</b><p className="text-slate-500">{post.category}</p></div>
         </div>)}
       </section>

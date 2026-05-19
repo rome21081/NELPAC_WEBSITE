@@ -1299,7 +1299,7 @@ begin
   update public.notifications
   set is_read = true
   where id = p_notification_id
-    and user_id = auth.uid()
+    and (user_id = auth.uid() or public.is_admin())
   returning * into updated_notification;
 
   if updated_notification.id is null then
