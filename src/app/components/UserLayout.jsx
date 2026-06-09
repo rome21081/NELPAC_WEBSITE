@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Outlet, useNavigate, useLocation, Link } from "react-router";
 import {
   LayoutDashboard,
@@ -48,8 +48,16 @@ function UserLayout() {
     return location.pathname === path;
   };
   const { data: myMembers } = useSupabaseData(() => user ? getMyMembers(user.id) : Promise.resolve([]), [user?.id]);
-  const { data: balances } = useSupabaseData(() => listPointBalances(), []);
+  const { data: balances, reload: reloadBalances } = useSupabaseData(() => listPointBalances(), []);
   const { data: notifications, reload: reloadNotifications } = useSupabaseData(() => user ? listNotifications(user.id) : Promise.resolve([]), [user?.id]);
+  useEffect(() => {
+    const refreshPoints = () => {
+      reloadBalances();
+      reloadNotifications();
+    };
+    window.addEventListener("nelpac:points-updated", refreshPoints);
+    return () => window.removeEventListener("nelpac:points-updated", refreshPoints);
+  }, [reloadBalances, reloadNotifications]);
   if (loading) return <LoadingState label="Checking session..." />;
   if (!profile) {
     navigate("/");

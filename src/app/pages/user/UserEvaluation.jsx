@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Star } from "lucide-react";
 import { EmptyState, ErrorState, LoadingState } from "../../components/DataState";
 import { useSupabaseData } from "../../lib/useSupabaseData";
-import { listEvents, submitEvaluation } from "../../lib/supabaseServices";
+import { listEvents, listPointBalances, submitEvaluation } from "../../lib/supabaseServices";
+import { useAuth } from "../../lib/authContext";
 
 function StarRating({ label, value, onChange }) {
   return <div>
@@ -25,13 +26,16 @@ function friendlyEvaluationError(error) {
 }
 
 function UserEvaluation() {
+  const { user } = useAuth();
   const { data: events, loading, error } = useSupabaseData(() => listEvents(), []);
+  const { data: balances, setData: setBalances } = useSupabaseData(() => user ? listPointBalances() : Promise.resolve([]), [user?.id]);
   const [form, setForm] = useState({ event_id: "", overall_rating: 5, speaker_rating: 5, venue_rating: 5, program_rating: 5, comment: "" });
   const [message, setMessage] = useState("");
   const [success, setSuccess] = useState("");
   const eligible = events.filter((event) => ["Published", "Completed"].includes(event.status));
   const selectedEvent = eligible.find((event) => event.id === form.event_id);
   const evaluationClosed = selectedEvent && !selectedEvent.evaluation_enabled;
+  const points = balances.find((balance) => balance.user_id === user?.id)?.points_balance || 0;
 
   const submit = async (event) => {
     event.preventDefault();
@@ -42,8 +46,13 @@ function UserEvaluation() {
       return;
     }
     try {
-      await submitEvaluation(form);
-      setSuccess("Evaluation submitted. Thank you for your feedback.");
+      const result = await submitEvaluation(form);
+      const nextBalances = await listPointBalances();
+      setBalances(nextBalances);
+      window.dispatchEvent(new CustomEvent("nelpac:points-updated"));
+      const awarded = result?.points_awarded ?? 100;
+      const updatedPoints = nextBalances.find((balance) => balance.user_id === user?.id)?.points_balance || points + awarded;
+      setSuccess(`Evaluation submitted. You earned ${awarded} NELPAC Points for completing the evaluation. Updated One Card balance: ${updatedPoints.toLocaleString()} pts.`);
       setForm({ event_id: "", overall_rating: 5, speaker_rating: 5, venue_rating: 5, program_rating: 5, comment: "" });
     } catch (err) {
       setMessage(friendlyEvaluationError(err));
@@ -54,7 +63,7 @@ function UserEvaluation() {
   return <div className="space-y-5">
     <div>
       <h1 className="text-slate-900" style={{ fontSize: "22px", fontWeight: 700 }}>Event Evaluation</h1>
-      <p className="text-slate-500 text-sm">Submit feedback for eligible events</p>
+      <p className="text-slate-500 text-sm">Submit feedback for eligible events · One Card balance: {points.toLocaleString()} pts</p>
     </div>
     <ErrorState message={error || message} />
     {success && <p className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-700">{success}</p>}

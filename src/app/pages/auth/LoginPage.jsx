@@ -237,12 +237,21 @@ function LoginPage() {
               </div>
 
               <div>
-                <label
-                  className="text-slate-700 block mb-1.5"
-                  style={{ fontSize: "13px", fontWeight: 600 }}
-                >
-                  Password
-                </label>
+                <div className="mb-1.5 flex items-center justify-between gap-3">
+                  <label
+                    className="text-slate-700"
+                    style={{ fontSize: "13px", fontWeight: 600 }}
+                  >
+                    Password
+                  </label>
+                  <Link
+                    to="/forgot-password"
+                    className="text-blue-600 hover:text-blue-700"
+                    style={{ fontSize: "12px", fontWeight: 700 }}
+                  >
+                    Forgot Password?
+                  </Link>
+                </div>
                 <div className="relative">
                   <Lock
                     className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"

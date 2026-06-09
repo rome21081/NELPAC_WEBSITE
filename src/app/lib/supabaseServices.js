@@ -130,6 +130,12 @@ async function listEvaluationAnalytics() {
   return runQuery(requireSupabase().from("event_evaluation_analytics").select("*").order("event_date", { ascending: false }));
 }
 
+async function listEvaluationRewardHistory(userId = null) {
+  let query = requireSupabase().from("evaluation_reward_history").select("*, events(title), profiles(full_name, email)").order("created_at", { ascending: false });
+  if (userId) query = query.eq("user_id", userId);
+  return runQuery(query);
+}
+
 async function submitEvaluation(payload) {
   const { data, error } = await requireSupabase().rpc("submit_event_evaluation", {
     p_event_id: payload.event_id,
@@ -336,6 +342,17 @@ async function markNotificationRead(notificationId) {
   return data;
 }
 
+async function logPasswordResetActivity({ email = null, activityType, success = true, detail = null }) {
+  const { data, error } = await requireSupabase().rpc("log_password_reset_activity", {
+    p_email: email,
+    p_activity_type: activityType,
+    p_success: success,
+    p_detail: detail,
+  });
+  if (error) throw error;
+  return data;
+}
+
 async function listAuditLogs() {
   return runQuery(requireSupabase().from("audit_logs").select("*").order("created_at", { ascending: false }).limit(100));
 }
@@ -384,6 +401,7 @@ export {
   listEvents,
   listEvaluationAnalytics,
   listEvaluationDetails,
+  listEvaluationRewardHistory,
   listImageSubmissions,
   listLocalChurches,
   listMembers,
@@ -396,6 +414,7 @@ export {
   listRedeemCodes,
   listRewardClaims,
   listRewards,
+  logPasswordResetActivity,
   markNotificationRead,
   markRewardClaimClaimed,
   requireSupabase,

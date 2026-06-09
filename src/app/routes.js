@@ -3,6 +3,8 @@ import { AdminLayout } from "./components/AdminLayout";
 import { UserLayout } from "./components/UserLayout";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { RegisterPage } from "./pages/auth/RegisterPage";
+import { ForgotPasswordPage } from "./pages/auth/ForgotPasswordPage";
+import { ResetPasswordPage } from "./pages/auth/ResetPasswordPage";
 import { AdminDashboard } from "./pages/admin/AdminDashboard";
 import { YouthDatabase } from "./pages/admin/YouthDatabase";
 import { NelpacOneCardAdmin } from "./pages/admin/NelpacOneCardAdmin";
@@ -27,6 +29,8 @@ import { UserSettings } from "./pages/user/UserSettings";
 const router = createBrowserRouter([
   { path: "/", Component: LoginPage },
   { path: "/register", Component: RegisterPage },
+  { path: "/forgot-password", Component: ForgotPasswordPage },
+  { path: "/reset-password", Component: ResetPasswordPage },
   {
     path: "/admin",
     Component: AdminLayout,

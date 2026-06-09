@@ -1,16 +1,20 @@
-import { useMemo, useState } from "react";
-import { CheckCircle2, Eye, Filter, Search, XCircle } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Eye, Filter, Search, XCircle } from "lucide-react";
 import { EmptyState, ErrorState, LoadingState } from "../../components/DataState";
 import { useSupabaseData } from "../../lib/useSupabaseData";
 import { listMembers, reviewMember } from "../../lib/supabaseServices";
 import { activityStatusColors, confirmationStatusColors, professingMemberColors, verificationColors } from "../../lib/localChurchMembers";
 
 const selectClass = "py-2 px-3 rounded-xl border border-slate-200 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20";
+const inputClass = "w-full py-2 px-3 rounded-xl border border-slate-200 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20";
+const pageSizeOptions = [10, 25, 50];
 
 function YouthDatabase() {
   const { data: members, loading, error, reload } = useSupabaseData(() => listMembers(), []);
   const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState({ district: "", church: "", review: "", activity: "" });
+  const [filters, setFilters] = useState({ district: "", church: "", review: "", confirmation: "", activity: "", age: "", minAge: "", maxAge: "" });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [viewProfile, setViewProfile] = useState(null);
   const [actionError, setActionError] = useState("");
   const [actionSuccess, setActionSuccess] = useState("");
@@ -22,13 +26,25 @@ function YouthDatabase() {
     const query = search.toLowerCase();
     return members.filter((member) => {
       const searchable = `${member.name} ${member.local_church_name} ${member.district} ${member.contact_number} ${member.emergency_contact} ${member.gender} ${member.review_status} ${member.activity_status}`.toLowerCase();
+      const age = Number(member.computed_age);
+      const exactAge = filters.age === "" ? null : Number(filters.age);
+      const minAge = filters.minAge === "" ? null : Number(filters.minAge);
+      const maxAge = filters.maxAge === "" ? null : Number(filters.maxAge);
+      const confirmationStatus = filters.confirmation === "Confirmed" ? "Approved" : filters.confirmation;
       return searchable.includes(query)
         && (!filters.district || member.district === filters.district)
         && (!filters.church || member.local_church_name === filters.church)
         && (!filters.review || member.review_status === filters.review)
+        && (!filters.confirmation || member.review_status === confirmationStatus)
+        && (exactAge === null || age === exactAge)
+        && (minAge === null || age >= minAge)
+        && (maxAge === null || age <= maxAge)
         && (!filters.activity || member.activity_status === filters.activity);
     });
   }, [filters, members, search]);
+  const pageCount = Math.max(Math.ceil(filtered.length / pageSize), 1);
+  const pageStart = (page - 1) * pageSize;
+  const paginated = filtered.slice(pageStart, pageStart + pageSize);
 
   const pendingMembers = useMemo(() => members.filter((member) => member.review_status === "Pending"), [members]);
 
@@ -73,6 +89,14 @@ function YouthDatabase() {
     if (confirmAction.type === "single") executeReview(confirmAction.id, confirmAction.status);
     if (confirmAction.type === "bulk") executeBulkReview(confirmAction.status);
   };
+
+  useEffect(() => {
+    setPage(1);
+  }, [filters, pageSize, search]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, pageCount));
+  }, [pageCount]);
 
   if (loading) return <LoadingState label="Loading youth database..." />;
 
@@ -120,8 +144,8 @@ function YouthDatabase() {
           <Filter style={{ width: 16, height: 16, color: "#64748b" }} />
           <p className="text-slate-800" style={{ fontSize: "14px", fontWeight: 700 }}>Filters and Search</p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-3">
-          <div className="relative">
+        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-8 gap-3">
+          <div className="relative xl:col-span-2">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" style={{ width: 15, height: 15 }} />
             <input placeholder="Search records..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20" />
           </div>
@@ -134,21 +158,40 @@ function YouthDatabase() {
           <select value={filters.review} onChange={(e) => setFilters((f) => ({ ...f, review: e.target.value }))} className={selectClass}>
             <option value="">All Review Status</option><option>Pending</option><option>Approved</option><option>Rejected</option>
           </select>
+          <select value={filters.confirmation} onChange={(e) => setFilters((f) => ({ ...f, confirmation: e.target.value }))} className={selectClass}>
+            <option value="">All Confirmation</option><option>Confirmed</option><option>Pending</option><option>Rejected</option>
+          </select>
           <select value={filters.activity} onChange={(e) => setFilters((f) => ({ ...f, activity: e.target.value }))} className={selectClass}>
             <option value="">All Activity Status</option><option>Active</option><option>Inactive</option>
           </select>
-          <button onClick={() => setFilters({ district: "", church: "", review: "", activity: "" })} className="py-2 px-3 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50">Reset</button>
+          <input type="number" min="0" placeholder="Exact age" value={filters.age} onChange={(e) => setFilters((f) => ({ ...f, age: e.target.value }))} className={inputClass} />
+          <div className="grid grid-cols-2 gap-2">
+            <input type="number" min="0" placeholder="Min age" value={filters.minAge} onChange={(e) => setFilters((f) => ({ ...f, minAge: e.target.value }))} className={inputClass} />
+            <input type="number" min="0" placeholder="Max age" value={filters.maxAge} onChange={(e) => setFilters((f) => ({ ...f, maxAge: e.target.value }))} className={inputClass} />
+          </div>
+          <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} className={selectClass}>
+            {pageSizeOptions.map((size) => <option key={size} value={size}>{size} per page</option>)}
+          </select>
+          <button onClick={() => setFilters({ district: "", church: "", review: "", confirmation: "", activity: "", age: "", minAge: "", maxAge: "" })} className="py-2 px-3 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50">Reset</button>
         </div>
       </div>
 
       {filtered.length === 0 ? <EmptyState label="No member records match the current filters." /> : <div className="bg-white rounded-2xl overflow-hidden border border-slate-100">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 text-sm text-slate-500">
+            <span>Showing {pageStart + 1}-{Math.min(pageStart + pageSize, filtered.length)} of {filtered.length} records</span>
+            <div className="flex items-center gap-2">
+              <button disabled={page === 1} onClick={() => setPage((current) => Math.max(current - 1, 1))} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 disabled:opacity-40"><ChevronLeft style={{ width: 14, height: 14 }} /> Previous</button>
+              <span className="text-slate-600">Page {page} of {pageCount}</span>
+              <button disabled={page === pageCount} onClick={() => setPage((current) => Math.min(current + 1, pageCount))} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 disabled:opacity-40">Next <ChevronRight style={{ width: 14, height: 14 }} /></button>
+            </div>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead><tr className="bg-slate-50 border-b border-slate-100">
                 {["Name", "Age", "Birthday", "Contact", "Emergency", "Gender", "District", "Local Church", "Professing", "Confirmation", "Activity", "Review", "Actions"].map((h) => <th key={h} className="py-3 px-4 text-left text-slate-500" style={{ fontSize: "11px", fontWeight: 700 }}>{h}</th>)}
               </tr></thead>
               <tbody>
-                {filtered.map((member) => <tr key={member.id} className="border-b border-slate-50 hover:bg-slate-50/60">
+                {paginated.map((member) => <tr key={member.id} className="border-b border-slate-50 hover:bg-slate-50/60">
                   <td className="py-3 px-4 text-slate-800" style={{ fontSize: "13px", fontWeight: 700 }}>{member.name}</td>
                   <td className="py-3 px-4 text-slate-600 text-sm">{member.computed_age}</td>
                   <td className="py-3 px-4 text-slate-600 text-sm">{member.birthday}</td>

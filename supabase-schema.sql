@@ -794,6 +794,113 @@ create table if not exists public.one_card_points (
 
 comment on table public.one_card_points is 'Immutable ledger for NELPAC One Card points. Sum points per user for balance.';
 
+create table if not exists public.evaluation_reward_history (
+  id uuid primary key default gen_random_uuid(),
+  evaluation_id uuid not null references public.event_evaluations(id) on delete cascade,
+  event_id uuid not null references public.events(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  points_awarded integer not null default 100 check (points_awarded > 0),
+  points_entry_id uuid references public.one_card_points(id) on delete set null,
+  reward_status text not null default 'Awarded',
+  created_at timestamptz not null default now(),
+  constraint evaluation_reward_history_once_per_evaluation unique (evaluation_id),
+  constraint evaluation_reward_history_once_per_event_user unique (event_id, user_id)
+);
+
+comment on table public.evaluation_reward_history is 'Audit log for automatic NELPAC One Card rewards granted after completed event evaluations.';
+
+create or replace function public.submit_event_evaluation(
+  p_event_id uuid,
+  p_overall_rating integer,
+  p_speaker_rating integer,
+  p_venue_rating integer,
+  p_program_rating integer,
+  p_comment text default null
+)
+returns public.event_evaluations
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  event_record public.events;
+  new_evaluation public.event_evaluations;
+  points_entry_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select * into event_record
+  from public.events
+  where id = p_event_id
+    and status in ('Published', 'Completed')
+    and evaluation_enabled = true;
+
+  if event_record.id is null then
+    raise exception 'This event is not available for evaluation';
+  end if;
+
+  insert into public.event_evaluations (
+    event_id,
+    user_id,
+    overall_rating,
+    speaker_rating,
+    venue_rating,
+    program_rating,
+    comment
+  )
+  values (
+    p_event_id,
+    auth.uid(),
+    p_overall_rating,
+    p_speaker_rating,
+    p_venue_rating,
+    p_program_rating,
+    p_comment
+  )
+  returning * into new_evaluation;
+
+  insert into public.one_card_points (user_id, entry_type, points, description, event_id, created_by)
+  values (
+    auth.uid(),
+    'earned',
+    100,
+    'Evaluation completion reward: ' || event_record.title,
+    p_event_id,
+    auth.uid()
+  )
+  returning id into points_entry_id;
+
+  insert into public.evaluation_reward_history (
+    evaluation_id,
+    event_id,
+    user_id,
+    points_awarded,
+    points_entry_id,
+    reward_status
+  )
+  values (
+    new_evaluation.id,
+    p_event_id,
+    auth.uid(),
+    100,
+    points_entry_id,
+    'Awarded'
+  );
+
+  insert into public.notifications (user_id, title, message, type)
+  values (
+    auth.uid(),
+    'Evaluation reward earned',
+    'You earned 100 NELPAC Points for completing the evaluation for ' || event_record.title || '.',
+    'points'
+  );
+
+  return new_evaluation;
+end;
+$$;
+
 create table if not exists public.one_card_redeem_codes (
   id uuid primary key default gen_random_uuid(),
   code text not null unique,
@@ -1145,6 +1252,18 @@ create table if not exists public.audit_logs (
 
 comment on table public.audit_logs is 'Append-only audit trail for important admin actions.';
 
+create table if not exists public.password_reset_activity (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.profiles(id) on delete set null,
+  email_hash text,
+  activity_type text not null check (activity_type in ('request', 'completed', 'failed', 'rate_limited')),
+  success boolean not null default true,
+  detail text,
+  created_at timestamptz not null default now()
+);
+
+comment on table public.password_reset_activity is 'Security audit log for password reset requests and completions. Email values are stored as hashes to reduce sensitive data exposure.';
+
 -- Internal audit helper for RPCs. Admins can also insert audit logs directly through RLS.
 create or replace function public.record_audit_log(
   p_action_type text,
@@ -1192,6 +1311,66 @@ begin
   return new_log;
 end;
 $$;
+
+create or replace function public.log_password_reset_activity(
+  p_email text default null,
+  p_activity_type text default 'request',
+  p_success boolean default true,
+  p_detail text default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  normalized_email text;
+  hashed_email text;
+  matched_user_id uuid;
+  recent_requests integer;
+begin
+  if p_activity_type not in ('request', 'completed', 'failed', 'rate_limited') then
+    raise exception 'Invalid password reset activity type';
+  end if;
+
+  normalized_email := lower(trim(coalesce(p_email, '')));
+
+  if normalized_email = '' and auth.uid() is not null then
+    select lower(trim(email)) into normalized_email
+    from public.profiles
+    where id = auth.uid();
+  end if;
+
+  if normalized_email <> '' then
+    hashed_email := encode(digest(normalized_email, 'sha256'), 'hex');
+    select id into matched_user_id
+    from public.profiles
+    where lower(trim(email)) = normalized_email
+    limit 1;
+  else
+    matched_user_id := auth.uid();
+  end if;
+
+  if p_activity_type = 'request' and hashed_email is not null then
+    select count(*)::integer into recent_requests
+    from public.password_reset_activity
+    where email_hash = hashed_email
+      and activity_type in ('request', 'rate_limited')
+      and created_at > now() - interval '1 hour';
+
+    if recent_requests >= 5 then
+      insert into public.password_reset_activity (user_id, email_hash, activity_type, success, detail)
+      values (matched_user_id, hashed_email, 'rate_limited', false, 'Password reset request rate limit exceeded');
+      raise exception 'Too many password reset requests. Please try again later.';
+    end if;
+  end if;
+
+  insert into public.password_reset_activity (user_id, email_hash, activity_type, success, detail)
+  values (coalesce(matched_user_id, auth.uid()), hashed_email, p_activity_type, p_success, p_detail);
+end;
+$$;
+
+grant execute on function public.log_password_reset_activity(text, text, boolean, text) to anon, authenticated;
 
 create or replace function public.create_notification(
   p_user_id uuid,
@@ -1558,6 +1737,8 @@ create index if not exists event_evaluations_event_idx on public.event_evaluatio
 create index if not exists event_evaluations_user_idx on public.event_evaluations(user_id, submitted_at desc);
 create index if not exists event_evaluations_event_user_idx on public.event_evaluations(event_id, user_id);
 create index if not exists event_evaluations_submitted_at_idx on public.event_evaluations(submitted_at desc);
+create index if not exists evaluation_reward_history_user_idx on public.evaluation_reward_history(user_id, created_at desc);
+create index if not exists evaluation_reward_history_event_idx on public.evaluation_reward_history(event_id, created_at desc);
 create index if not exists image_submissions_status_idx on public.image_submissions(status);
 create index if not exists image_submissions_submitted_by_idx on public.image_submissions(submitted_by);
 create index if not exists one_card_points_user_idx on public.one_card_points(user_id, created_at desc);
@@ -1578,6 +1759,9 @@ create index if not exists notifications_type_idx on public.notifications(type);
 create index if not exists audit_logs_admin_idx on public.audit_logs(admin_user_id, created_at desc);
 create index if not exists audit_logs_table_record_idx on public.audit_logs(table_name, record_id);
 create index if not exists audit_logs_action_idx on public.audit_logs(action_type, created_at desc);
+create index if not exists password_reset_activity_email_idx on public.password_reset_activity(email_hash, created_at desc);
+create index if not exists password_reset_activity_user_idx on public.password_reset_activity(user_id, created_at desc);
+create index if not exists password_reset_activity_type_idx on public.password_reset_activity(activity_type, created_at desc);
 
 -- =========================
 -- RLS
@@ -1589,6 +1773,7 @@ alter table public.local_church_members enable row level security;
 alter table public.member_review_logs enable row level security;
 alter table public.events enable row level security;
 alter table public.event_evaluations enable row level security;
+alter table public.evaluation_reward_history enable row level security;
 alter table public.image_submissions enable row level security;
 alter table public.one_card_points enable row level security;
 alter table public.one_card_redeem_codes enable row level security;
@@ -1599,6 +1784,7 @@ alter table public.reward_claims enable row level security;
 alter table public.redeem_codes enable row level security;
 alter table public.notifications enable row level security;
 alter table public.audit_logs enable row level security;
+alter table public.password_reset_activity enable row level security;
 
 -- Profiles
 drop policy if exists "profiles_select_own_or_admin" on public.profiles;
@@ -1751,6 +1937,21 @@ create policy "evaluations_delete_admin"
 on public.event_evaluations for delete
 to authenticated
 using (public.is_admin());
+
+drop policy if exists "evaluation_reward_history_select_own_or_admin" on public.evaluation_reward_history;
+create policy "evaluation_reward_history_select_own_or_admin"
+on public.evaluation_reward_history for select
+to authenticated
+using (user_id = auth.uid() or public.is_admin());
+
+drop policy if exists "evaluation_reward_history_insert_system" on public.evaluation_reward_history;
+
+drop policy if exists "evaluation_reward_history_update_admin" on public.evaluation_reward_history;
+create policy "evaluation_reward_history_update_admin"
+on public.evaluation_reward_history for update
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
 
 -- Image submissions
 drop policy if exists "image_submissions_select_own_approved_or_admin" on public.image_submissions;
@@ -1972,6 +2173,15 @@ to authenticated
 with check (public.is_admin());
 
 -- Audit logs are append-only: no update or delete policies.
+
+-- Password reset activity
+drop policy if exists "password_reset_activity_select_admin" on public.password_reset_activity;
+create policy "password_reset_activity_select_admin"
+on public.password_reset_activity for select
+to authenticated
+using (public.is_admin());
+
+-- Password reset activity is written only through log_password_reset_activity().
 
 -- =========================
 -- Frontend-friendly Views
