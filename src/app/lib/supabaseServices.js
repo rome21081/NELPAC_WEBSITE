@@ -153,7 +153,7 @@ async function listImageSubmissions() {
   return runQuery(
     requireSupabase()
       .from("image_submissions")
-      .select("*, events(title), local_churches(name), profiles!image_submissions_submitted_by_fkey(full_name)")
+      .select("*, events(title), local_churches(name), submitted_by_profile:profiles!image_submissions_submitted_by_fkey(full_name)")
       .order("created_at", { ascending: false })
   );
 }

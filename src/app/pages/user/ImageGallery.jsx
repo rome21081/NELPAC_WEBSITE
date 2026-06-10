@@ -65,7 +65,7 @@ function ImageGallery() {
                   {image.local_churches?.name || "No church"}
                 </p>
                 <p className="text-xs text-slate-500">
-                  {image.profiles?.full_name || "No submitter"}
+                  Uploaded by {image.submitted_by_profile?.full_name || "Unknown user"}
                 </p>
               </div>
             </div>
