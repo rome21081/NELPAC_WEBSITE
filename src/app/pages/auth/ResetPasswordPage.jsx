@@ -29,44 +29,68 @@ function ResetPasswordPage() {
 
   useEffect(() => {
     let alive = true;
-    let recoverySeen = false;
+    let subscription;
 
-    async function checkSession() {
+    async function consumeRecoveryToken() {
       if (!supabase) {
-        setStatus("invalid");
-        setMessage("Authentication is not configured.");
+        if (alive) {
+          setStatus("invalid");
+          setMessage("Authentication is not configured.");
+        }
         return;
       }
 
-      const { data: listener } = supabase.auth.onAuthStateChange((event) => {
-        if (event === "PASSWORD_RECOVERY") {
-          recoverySeen = true;
-          if (alive) {
-            setStatus("ready");
-            setMessage("");
-          }
-        }
-      });
+      const params = new URLSearchParams(window.location.search);
+      const tokenHash = params.get("token_hash");
+      const type = params.get("type");
+      const authCode = params.get("code");
 
-      window.setTimeout(async () => {
-        const { data } = await supabase.auth.getSession();
+      try {
+        if (tokenHash && type === "recovery") {
+          const { error: otpError } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "recovery" });
+          if (otpError) throw otpError;
+        } else if (authCode) {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(authCode);
+          if (exchangeError) throw exchangeError;
+        }
+
+        const { data: sessionData } = await supabase.auth.getSession();
         if (!alive) return;
-        if (data.session?.user && (recoverySeen || window.location.hash || window.location.search)) {
+
+        if (sessionData.session?.user) {
           setStatus("ready");
           setMessage("");
-        } else {
-          setStatus("invalid");
-          setMessage("This reset link is invalid, expired, or already used. Please request a new password reset link.");
+          return;
         }
-      }, 800);
+      } catch (error) {
+        if (import.meta.env.DEV) console.error("Password recovery token validation failed", error);
+        if (!alive) return;
+        setStatus("invalid");
+        setMessage("This reset link is invalid, expired, or already used. Please request a new password reset link.");
+        return;
+      }
 
-      return listener.subscription;
+      if (!alive) return;
+      setStatus("invalid");
+      setMessage("This reset link is invalid, expired, or already used. Please request a new password reset link.");
     }
 
-    let subscription;
-    checkSession().then((nextSubscription) => {
-      subscription = nextSubscription;
+    if (!supabase) {
+      setStatus("invalid");
+      setMessage("Authentication is not configured.");
+      return;
+    }
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY" && alive) {
+        setStatus("ready");
+        setMessage("");
+      }
     });
+    subscription = listener.subscription;
+
+    consumeRecoveryToken();
+
     return () => {
       alive = false;
       subscription?.unsubscribe();
@@ -122,7 +146,7 @@ function ResetPasswordPage() {
         <label className="block text-sm text-slate-700" style={{ fontWeight: 700 }}>
           New Password
           <div className="relative mt-1.5">
-            <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" style={{ width: 16, height: 16 }} />
+            <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input
               required
               type={showPassword ? "text" : "password"}
@@ -131,7 +155,7 @@ function ResetPasswordPage() {
               className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-10 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
             />
             <button type="button" onClick={() => setShowPassword((visible) => !visible)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-              {showPassword ? <EyeOff style={{ width: 16, height: 16 }} /> : <Eye style={{ width: 16, height: 16 }} />}
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
         </label>
@@ -152,7 +176,7 @@ function ResetPasswordPage() {
           {["At least 8 characters", "One uppercase letter", "One lowercase letter", "One number", "One symbol"].map((requirement) => {
             const met = !passwordIssues.includes(requirement);
             return <div key={requirement} className={`flex items-center gap-2 py-0.5 text-sm ${met ? "text-emerald-700" : "text-slate-500"}`}>
-              {met ? <CheckCircle2 style={{ width: 14, height: 14 }} /> : <XCircle style={{ width: 14, height: 14 }} />}
+              {met ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
               <span>{requirement}</span>
             </div>;
           })}

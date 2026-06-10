@@ -1,21 +1,13 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { ArrowLeft, Mail, ShieldCheck } from "lucide-react";
-import { supabase } from "../../lib/supabaseClient";
+import { getPasswordResetRedirectUrl, supabase } from "../../lib/supabaseClient";
 import { logPasswordResetActivity } from "../../lib/supabaseServices";
 import nelpacLogo from "../../../../NELPAC-LOGO.jpg";
 
 const genericMessage = "If an account exists with this email, a password reset link has been sent.";
 const cooldownKey = "nelpac-password-reset-last-request";
 
-function getResetRedirectUrl() {
-  const { origin, protocol, hostname } = window.location;
-  const local = ["localhost", "127.0.0.1"].includes(hostname);
-  if (protocol !== "https:" && !local) {
-    throw new Error("Password reset links must use HTTPS. Please open the system through a secure URL.");
-  }
-  return `${origin}/reset-password`;
-}
 
 function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -36,16 +28,27 @@ function ForgotPasswordPage() {
         throw new Error("Please wait a minute before requesting another reset link.");
       }
 
-      await logPasswordResetActivity({ email, activityType: "request", success: true });
+      const redirectTo = getPasswordResetRedirectUrl();
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: getResetRedirectUrl(),
+        redirectTo,
       });
       if (resetError) throw resetError;
+
+      try {
+        await logPasswordResetActivity({ email: email.trim(), activityType: "request", success: true });
+      } catch (logError) {
+        if (import.meta.env.DEV) {
+          console.warn("Password reset audit logging failed", logError);
+        }
+      }
 
       window.localStorage.setItem(cooldownKey, String(Date.now()));
       setMessage(genericMessage);
       setEmail("");
     } catch (err) {
+      if (import.meta.env.DEV) {
+        console.error("Password reset request failed", err);
+      }
       if (err.message?.toLowerCase().includes("too many")) {
         setError("Too many reset requests. Please try again later.");
       } else if (err.message?.includes("HTTPS")) {
@@ -71,7 +74,7 @@ function ForgotPasswordPage() {
       </div>
 
       <div className="mb-6 rounded-2xl bg-blue-50 p-4 text-blue-800">
-        <ShieldCheck className="mb-2" style={{ width: 20, height: 20 }} />
+        <ShieldCheck className="mb-2" size={20} />
         <p className="text-sm">Enter your registered email address. For privacy, the system will not reveal whether the email is registered.</p>
       </div>
 
@@ -79,7 +82,7 @@ function ForgotPasswordPage() {
         <label className="block text-sm text-slate-700" style={{ fontWeight: 700 }}>
           Email Address
           <div className="relative mt-1.5">
-            <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" style={{ width: 16, height: 16 }} />
+            <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input
               required
               type="email"
@@ -100,7 +103,7 @@ function ForgotPasswordPage() {
       </form>
 
       <Link to="/" className="mt-5 inline-flex items-center gap-2 text-sm text-slate-500 hover:text-blue-700">
-        <ArrowLeft style={{ width: 15, height: 15 }} /> Back to login
+        <ArrowLeft size={15} /> Back to login
       </Link>
     </div>
   </div>;
