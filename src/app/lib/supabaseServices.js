@@ -150,7 +150,12 @@ async function submitEvaluation(payload) {
 }
 
 async function listImageSubmissions() {
-  return runQuery(requireSupabase().from("image_submissions").select("*, events(title), local_churches(name)").order("created_at", { ascending: false }));
+  return runQuery(
+    requireSupabase()
+      .from("image_submissions")
+      .select("*, events(title), local_churches(name), profiles!image_submissions_submitted_by_fkey(full_name)")
+      .order("created_at", { ascending: false })
+  );
 }
 
 async function uploadImageSubmission({ file, caption, event_id, local_church_id, userId }) {
