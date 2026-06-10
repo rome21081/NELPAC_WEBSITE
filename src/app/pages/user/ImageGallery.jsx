@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   EmptyState,
   ErrorState,
@@ -6,16 +6,40 @@ import {
 } from "../../components/DataState";
 import { ImageLightbox } from "../../components/ImageLightbox";
 import { useSupabaseData } from "../../lib/useSupabaseData";
-import { listImageSubmissions } from "../../lib/supabaseServices";
+import { listImageSubmissions, listProfiles } from "../../lib/supabaseServices";
 
 function ImageGallery() {
   const {
     data: images,
-    loading,
-    error,
+    loading: imagesLoading,
+    error: imagesError,
   } = useSupabaseData(() => listImageSubmissions(), []);
+  const {
+    data: profiles = [],
+    loading: profilesLoading,
+    error: profilesError,
+  } = useSupabaseData(() => listProfiles(), []);
   const [viewer, setViewer] = useState(null);
   const approved = images.filter((image) => image.status === "Approved");
+  const uploaderById = useMemo(
+    () => new Map((profiles || []).map((profile) => [profile.id, profile.full_name])),
+    [profiles]
+  );
+  const loading = imagesLoading || profilesLoading;
+  const error = imagesError || profilesError;
+
+  console.debug("[ImageGallery] profiles", profiles);
+  console.debug("[ImageGallery] uploaderById", Object.fromEntries(uploaderById));
+  console.debug(
+    "[ImageGallery] submitter matches",
+    approved.map((image) => ({
+      id: image.id,
+      submitted_by: image.submitted_by,
+      matched: uploaderById.has(image.submitted_by),
+      full_name: uploaderById.get(image.submitted_by),
+    }))
+  );
+
   if (loading) return <LoadingState label="Loading gallery..." />;
   return (
     <div className="space-y-5">
@@ -61,11 +85,10 @@ function ImageGallery() {
                   {image.caption || "No caption"}
                 </p>
                 <p className="text-xs text-slate-500">
-                  {image.events?.title || "No event"} -{" "}
-                  {image.local_churches?.name || "No church"}
+                  {image.events?.title || "No event"} - {image.local_churches?.name || "No church"}
                 </p>
                 <p className="text-xs text-slate-500">
-                  Uploaded by {image.submitted_by_profile?.full_name || "Unknown user"}
+                  Uploaded by {image.profiles?.full_name || uploaderById.get(image.submitted_by) || "Unknown user"}
                 </p>
               </div>
             </div>

@@ -41,7 +41,7 @@ async function compressImageFile(file, { maxWidth = 1600, maxHeight = 1600, qual
 }
 
 async function listProfiles() {
-  return runQuery(requireSupabase().from("profiles").select("*").order("created_at", { ascending: false }));
+  return runQuery(requireSupabase().from("profiles").select("id, full_name, email").order("created_at", { ascending: false }));
 }
 
 async function listLocalChurches(filters = {}) {
@@ -153,7 +153,7 @@ async function listImageSubmissions() {
   return runQuery(
     requireSupabase()
       .from("image_submissions")
-      .select("*, events(title), local_churches(name), submitted_by_profile:profiles!image_submissions_submitted_by_fkey(full_name)")
+      .select("*, events(title), local_churches(name), profiles!image_submissions_submitted_by_fkey(id, full_name)")
       .order("created_at", { ascending: false })
   );
 }
