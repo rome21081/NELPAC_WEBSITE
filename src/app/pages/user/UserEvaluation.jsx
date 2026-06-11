@@ -155,7 +155,34 @@ function UserEvaluation() {
         </div>
       )}
 
-      <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+      <aside className="grid gap-4 md:grid-cols-2">
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-3 flex items-center gap-2 text-blue-700">
+            <Info className="h-4 w-4" />
+            <h3 className="text-sm font-semibold uppercase tracking-[0.18em]">Guidelines</h3>
+          </div>
+          <div className="space-y-3 text-sm text-slate-600">
+            <p>Be honest and specific so the team can improve future events.</p>
+            <p>Use clear examples in your comments to highlight what worked well or what needs attention.</p>
+            <p>Each completed evaluation contributes to your NELPAC One Card points balance.</p>
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-slate-900 p-6 text-white shadow-sm">
+          <div className="mb-3 flex items-center gap-2 text-slate-100">
+            <ClipboardList className="h-4 w-4 text-amber-300" />
+            <h3 className="text-sm font-semibold uppercase tracking-[0.18em]">What to expect</h3>
+          </div>
+          <ul className="space-y-3 text-sm text-slate-200">
+            <li>1. Pick the event you attended.</li>
+            <li>2. Rate all six event experience categories.</li>
+            <li>3. Add optional comments for more detailed feedback.</li>
+            <li>4. Receive your points automatically after submission.</li>
+          </ul>
+        </section>
+      </aside>
+
+      <div>
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-6">
             <div className="mb-2 flex items-center justify-between gap-3 text-xs font-semibold">
@@ -247,32 +274,6 @@ function UserEvaluation() {
           )}
         </section>
 
-        <aside className="space-y-6">
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-3 flex items-center gap-2 text-blue-700">
-              <Info className="h-4 w-4" />
-              <h3 className="text-sm font-semibold uppercase tracking-[0.18em]">Guidelines</h3>
-            </div>
-            <div className="space-y-3 text-sm text-slate-600">
-              <p>Be honest and specific so the team can improve future events.</p>
-              <p>Use clear examples in your comments to highlight what worked well or what needs attention.</p>
-              <p>Each completed evaluation contributes to your NELPAC One Card points balance.</p>
-            </div>
-          </section>
-
-          <section className="rounded-3xl border border-slate-200 bg-slate-900 p-6 text-white shadow-sm">
-            <div className="mb-3 flex items-center gap-2 text-slate-100">
-              <ClipboardList className="h-4 w-4 text-amber-300" />
-              <h3 className="text-sm font-semibold uppercase tracking-[0.18em]">What to expect</h3>
-            </div>
-            <ul className="space-y-3 text-sm text-slate-200">
-              <li>1. Pick the event you attended.</li>
-              <li>2. Rate all six event experience categories.</li>
-              <li>3. Add optional comments for more detailed feedback.</li>
-              <li>4. Receive your points automatically after submission.</li>
-            </ul>
-          </section>
-        </aside>
       </div>
     </div>
   );
