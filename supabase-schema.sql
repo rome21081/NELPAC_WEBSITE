@@ -2386,4 +2386,5 @@ comment on view public.event_evaluation_rating_distribution is 'Rating distribut
 -- First admin bootstrap:
 -- 1. Sign up normally through Supabase Auth or your frontend.
 -- 2. In SQL Editor, run this once with your real admin email:
---    update public.profiles set role = 'admin' where email = 'admin@example.com';
+--    update public.profiles set role = 'admin' where email = 'lagmayjerome1@gmail.com';
+
