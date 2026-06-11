@@ -622,16 +622,48 @@ create table if not exists public.event_evaluations (
   id uuid primary key default gen_random_uuid(),
   event_id uuid not null references public.events(id) on delete cascade,
   user_id uuid not null references public.profiles(id) on delete cascade,
-  speaker_rating integer not null check (speaker_rating between 1 and 5),
-  venue_rating integer not null check (venue_rating between 1 and 5),
-  program_rating integer not null check (program_rating between 1 and 5),
-  overall_rating integer not null check (overall_rating between 1 and 5),
+  accommodation integer not null check (accommodation between 1 and 5),
+  time_management integer not null check (time_management between 1 and 5),
+  objectives_of_the_event integer not null check (objectives_of_the_event between 1 and 5),
+  organization_of_the_program integer not null check (organization_of_the_program between 1 and 5),
+  effectiveness_of_resource_speakers integer not null check (effectiveness_of_resource_speakers between 1 and 5),
+  committee_heads_and_staffs integer not null check (committee_heads_and_staffs between 1 and 5),
   comment text,
   submitted_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint event_evaluations_one_per_user unique (event_id, user_id)
 );
+
+-- Upgrade existing installations while preserving legacy evaluation records.
+alter table public.event_evaluations add column if not exists accommodation integer not null default 5 check (accommodation between 1 and 5);
+alter table public.event_evaluations add column if not exists time_management integer not null default 5 check (time_management between 1 and 5);
+alter table public.event_evaluations add column if not exists objectives_of_the_event integer not null default 5 check (objectives_of_the_event between 1 and 5);
+alter table public.event_evaluations add column if not exists organization_of_the_program integer not null default 5 check (organization_of_the_program between 1 and 5);
+alter table public.event_evaluations add column if not exists effectiveness_of_resource_speakers integer not null default 5 check (effectiveness_of_resource_speakers between 1 and 5);
+alter table public.event_evaluations add column if not exists committee_heads_and_staffs integer not null default 5 check (committee_heads_and_staffs between 1 and 5);
+alter table public.event_evaluations alter column accommodation drop default;
+alter table public.event_evaluations alter column time_management drop default;
+alter table public.event_evaluations alter column objectives_of_the_event drop default;
+alter table public.event_evaluations alter column organization_of_the_program drop default;
+alter table public.event_evaluations alter column effectiveness_of_resource_speakers drop default;
+alter table public.event_evaluations alter column committee_heads_and_staffs drop default;
+
+do $$
+declare
+  legacy_column text;
+begin
+  foreach legacy_column in array array['overall_rating', 'speaker_rating', 'venue_rating', 'program_rating']
+  loop
+    if exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'event_evaluations' and column_name = legacy_column
+    ) then
+      execute format('alter table public.event_evaluations alter column %I drop not null', legacy_column);
+    end if;
+  end loop;
+end;
+$$;
 
 comment on table public.event_evaluations is 'One event evaluation per user per event. Admins use this table for feedback analytics.';
 comment on column public.event_evaluations.user_id is 'The youth user who submitted the evaluation.';
@@ -642,12 +674,17 @@ create trigger set_event_evaluations_updated_at
 before update on public.event_evaluations
 for each row execute function public.set_updated_at();
 
+drop function if exists public.submit_event_evaluation(uuid, integer, integer, integer, integer, text);
+drop function if exists public.submit_event_evaluation(uuid, integer, integer, integer, integer, integer, integer, text);
+
 create or replace function public.submit_event_evaluation(
   p_event_id uuid,
-  p_overall_rating integer,
-  p_speaker_rating integer,
-  p_venue_rating integer,
-  p_program_rating integer,
+  p_accommodation integer,
+  p_time_management integer,
+  p_objectives_of_the_event integer,
+  p_organization_of_the_program integer,
+  p_effectiveness_of_resource_speakers integer,
+  p_committee_heads_and_staffs integer,
   p_comment text default null
 )
 returns public.event_evaluations
@@ -676,19 +713,23 @@ begin
   insert into public.event_evaluations (
     event_id,
     user_id,
-    overall_rating,
-    speaker_rating,
-    venue_rating,
-    program_rating,
+    accommodation,
+    time_management,
+    objectives_of_the_event,
+    organization_of_the_program,
+    effectiveness_of_resource_speakers,
+    committee_heads_and_staffs,
     comment
   )
   values (
     p_event_id,
     auth.uid(),
-    p_overall_rating,
-    p_speaker_rating,
-    p_venue_rating,
-    p_program_rating,
+    p_accommodation,
+    p_time_management,
+    p_objectives_of_the_event,
+    p_organization_of_the_program,
+    p_effectiveness_of_resource_speakers,
+    p_committee_heads_and_staffs,
     p_comment
   )
   returning * into new_evaluation;
@@ -809,12 +850,17 @@ create table if not exists public.evaluation_reward_history (
 
 comment on table public.evaluation_reward_history is 'Audit log for automatic NELPAC One Card rewards granted after completed event evaluations.';
 
+drop function if exists public.submit_event_evaluation(uuid, integer, integer, integer, integer, text);
+drop function if exists public.submit_event_evaluation(uuid, integer, integer, integer, integer, integer, integer, text);
+
 create or replace function public.submit_event_evaluation(
   p_event_id uuid,
-  p_overall_rating integer,
-  p_speaker_rating integer,
-  p_venue_rating integer,
-  p_program_rating integer,
+  p_accommodation integer,
+  p_time_management integer,
+  p_objectives_of_the_event integer,
+  p_organization_of_the_program integer,
+  p_effectiveness_of_resource_speakers integer,
+  p_committee_heads_and_staffs integer,
   p_comment text default null
 )
 returns public.event_evaluations
@@ -844,19 +890,23 @@ begin
   insert into public.event_evaluations (
     event_id,
     user_id,
-    overall_rating,
-    speaker_rating,
-    venue_rating,
-    program_rating,
+    accommodation,
+    time_management,
+    objectives_of_the_event,
+    organization_of_the_program,
+    effectiveness_of_resource_speakers,
+    committee_heads_and_staffs,
     comment
   )
   values (
     p_event_id,
     auth.uid(),
-    p_overall_rating,
-    p_speaker_rating,
-    p_venue_rating,
-    p_program_rating,
+    p_accommodation,
+    p_time_management,
+    p_objectives_of_the_event,
+    p_organization_of_the_program,
+    p_effectiveness_of_resource_speakers,
+    p_committee_heads_and_staffs,
     p_comment
   )
   returning * into new_evaluation;
@@ -2255,7 +2305,11 @@ join public.rewards r on r.id = rc.reward_id;
 
 comment on view public.reward_claims_with_rewards is 'Frontend view for displaying claim history with reward details.';
 
-create or replace view public.event_evaluation_details
+drop view if exists public.event_evaluation_rating_distribution;
+drop view if exists public.event_evaluation_analytics;
+drop view if exists public.event_evaluation_details;
+
+create view public.event_evaluation_details
 with (security_invoker = true)
 as
 select
@@ -2265,10 +2319,17 @@ select
   e.event_date,
   ev.user_id,
   p.full_name as user_full_name,
-  ev.overall_rating,
-  ev.speaker_rating,
-  ev.venue_rating,
-  ev.program_rating,
+  ev.accommodation,
+  ev.time_management,
+  ev.objectives_of_the_event,
+  ev.organization_of_the_program,
+  ev.effectiveness_of_resource_speakers,
+  ev.committee_heads_and_staffs,
+  round((
+    ev.accommodation + ev.time_management + ev.objectives_of_the_event
+    + ev.organization_of_the_program + ev.effectiveness_of_resource_speakers
+    + ev.committee_heads_and_staffs
+  )::numeric / 6, 2) as overall_rating,
   ev.comment,
   ev.submitted_at,
   ev.created_at,
@@ -2279,7 +2340,7 @@ join public.profiles p on p.id = ev.user_id;
 
 comment on view public.event_evaluation_details is 'Frontend view for submitted evaluations with event and user display fields.';
 
-create or replace view public.event_evaluation_analytics
+create view public.event_evaluation_analytics
 with (security_invoker = true)
 as
 select
@@ -2287,25 +2348,36 @@ select
   e.title as event_title,
   e.event_date,
   count(ev.id)::integer as total_evaluations,
-  round(avg(ev.overall_rating)::numeric, 2) as average_overall_rating,
-  round(avg(ev.speaker_rating)::numeric, 2) as average_speaker_rating,
-  round(avg(ev.venue_rating)::numeric, 2) as average_venue_rating,
-  round(avg(ev.program_rating)::numeric, 2) as average_program_rating
+  round(avg((
+    ev.accommodation + ev.time_management + ev.objectives_of_the_event
+    + ev.organization_of_the_program + ev.effectiveness_of_resource_speakers
+    + ev.committee_heads_and_staffs
+  )::numeric / 6), 2) as average_overall_rating,
+  round(avg(ev.accommodation)::numeric, 2) as average_accommodation,
+  round(avg(ev.time_management)::numeric, 2) as average_time_management,
+  round(avg(ev.objectives_of_the_event)::numeric, 2) as average_objectives_of_the_event,
+  round(avg(ev.organization_of_the_program)::numeric, 2) as average_organization_of_the_program,
+  round(avg(ev.effectiveness_of_resource_speakers)::numeric, 2) as average_effectiveness_of_resource_speakers,
+  round(avg(ev.committee_heads_and_staffs)::numeric, 2) as average_committee_heads_and_staffs
 from public.events e
 left join public.event_evaluations ev on ev.event_id = e.id
 group by e.id, e.title, e.event_date;
 
 comment on view public.event_evaluation_analytics is 'Admin-friendly aggregate averages and response counts per event.';
 
-create or replace view public.event_evaluation_rating_distribution
+create view public.event_evaluation_rating_distribution
 with (security_invoker = true)
 as
 select
   event_id,
-  overall_rating as rating,
+  round((
+    accommodation + time_management + objectives_of_the_event
+    + organization_of_the_program + effectiveness_of_resource_speakers
+    + committee_heads_and_staffs
+  )::numeric / 6) as rating,
   count(*)::integer as response_count
 from public.event_evaluations
-group by event_id, overall_rating;
+group by event_id, rating;
 
 comment on view public.event_evaluation_rating_distribution is 'Rating distribution per event for charts and feedback analytics.';
 

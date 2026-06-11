@@ -63,10 +63,12 @@ function EvaluationManagement() {
     const eligibleMembers = members.filter((member) => member.review_status === "Approved" || member.review_status === "Confirmed").length || members.length;
     const completionRate = eligibleMembers ? Math.round((uniqueParticipants / eligibleMembers) * 100) : 0;
     const categoryAverages = [
-      { category: "Overall", average: Number(formatRating(average(details.map((detail) => detail.overall_rating)))) },
-      { category: "Speaker", average: Number(formatRating(average(details.map((detail) => detail.speaker_rating)))) },
-      { category: "Venue", average: Number(formatRating(average(details.map((detail) => detail.venue_rating)))) },
-      { category: "Program", average: Number(formatRating(average(details.map((detail) => detail.program_rating)))) },
+      { category: "Accommodation", average: Number(formatRating(average(details.map((detail) => detail.accommodation)))) },
+      { category: "Time", average: Number(formatRating(average(details.map((detail) => detail.time_management)))) },
+      { category: "Objectives", average: Number(formatRating(average(details.map((detail) => detail.objectives_of_the_event)))) },
+      { category: "Organization", average: Number(formatRating(average(details.map((detail) => detail.organization_of_the_program)))) },
+      { category: "Speakers", average: Number(formatRating(average(details.map((detail) => detail.effectiveness_of_resource_speakers)))) },
+      { category: "Staffs", average: Number(formatRating(average(details.map((detail) => detail.committee_heads_and_staffs)))) },
     ];
     const eventPerformance = analytics
       .filter((event) => event.total_evaluations > 0)
@@ -164,15 +166,18 @@ function EvaluationManagement() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-slate-100 bg-slate-50 text-left text-slate-500">
-              {["Event", "Responses", "Overall", "Speaker", "Venue", "Program"].map((heading) => <th key={heading} className="px-4 py-3" style={{ fontSize: "11px", fontWeight: 700 }}>{heading}</th>)}
+              {["Event", "Responses", "Overall", "Accommodation", "Time", "Objectives", "Organization", "Speakers", "Staffs"].map((heading) => <th key={heading} className="whitespace-nowrap px-4 py-3" style={{ fontSize: "11px", fontWeight: 700 }}>{heading}</th>)}
             </tr></thead>
             <tbody>{analytics.filter((event) => event.total_evaluations > 0).map((event) => <tr key={event.event_id} className="border-b border-slate-50">
               <td className="px-4 py-3 text-slate-800" style={{ fontWeight: 700 }}>{event.event_title}</td>
               <td className="px-4 py-3 text-slate-600">{event.total_evaluations}</td>
               <td className="px-4 py-3 text-slate-600">{event.average_overall_rating || "0.00"}</td>
-              <td className="px-4 py-3 text-slate-600">{event.average_speaker_rating || "0.00"}</td>
-              <td className="px-4 py-3 text-slate-600">{event.average_venue_rating || "0.00"}</td>
-              <td className="px-4 py-3 text-slate-600">{event.average_program_rating || "0.00"}</td>
+              <td className="px-4 py-3 text-slate-600">{event.average_accommodation || "0.00"}</td>
+              <td className="px-4 py-3 text-slate-600">{event.average_time_management || "0.00"}</td>
+              <td className="px-4 py-3 text-slate-600">{event.average_objectives_of_the_event || "0.00"}</td>
+              <td className="px-4 py-3 text-slate-600">{event.average_organization_of_the_program || "0.00"}</td>
+              <td className="px-4 py-3 text-slate-600">{event.average_effectiveness_of_resource_speakers || "0.00"}</td>
+              <td className="px-4 py-3 text-slate-600">{event.average_committee_heads_and_staffs || "0.00"}</td>
             </tr>)}</tbody>
           </table>
         </div>

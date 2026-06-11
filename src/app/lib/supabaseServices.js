@@ -139,10 +139,12 @@ async function listEvaluationRewardHistory(userId = null) {
 async function submitEvaluation(payload) {
   const { data, error } = await requireSupabase().rpc("submit_event_evaluation", {
     p_event_id: payload.event_id,
-    p_overall_rating: payload.overall_rating,
-    p_speaker_rating: payload.speaker_rating,
-    p_venue_rating: payload.venue_rating,
-    p_program_rating: payload.program_rating,
+    p_accommodation: payload.accommodation,
+    p_time_management: payload.time_management,
+    p_objectives_of_the_event: payload.objectives_of_the_event,
+    p_organization_of_the_program: payload.organization_of_the_program,
+    p_effectiveness_of_resource_speakers: payload.effectiveness_of_resource_speakers,
+    p_committee_heads_and_staffs: payload.committee_heads_and_staffs,
     p_comment: payload.comment || null,
   });
   if (error) throw error;
