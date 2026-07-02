@@ -1,7 +1,10 @@
 import { supabase } from "./supabaseClient";
 
 function requireSupabase() {
-  if (!supabase) throw new Error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY.");
+  if (!supabase)
+    throw new Error(
+      "Missing VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY.",
+    );
   return supabase;
 }
 
@@ -11,8 +14,12 @@ async function runQuery(query) {
   return data || [];
 }
 
-async function compressImageFile(file, { maxWidth = 1600, maxHeight = 1600, quality = 0.82 } = {}) {
-  if (!file?.type?.startsWith("image/") || file.type === "image/gif") return file;
+async function compressImageFile(
+  file,
+  { maxWidth = 1600, maxHeight = 1600, quality = 0.82 } = {},
+) {
+  if (!file?.type?.startsWith("image/") || file.type === "image/gif")
+    return file;
 
   const imageUrl = URL.createObjectURL(file);
   try {
@@ -32,38 +39,54 @@ async function compressImageFile(file, { maxWidth = 1600, maxHeight = 1600, qual
     const context = canvas.getContext("2d");
     context.drawImage(image, 0, 0, width, height);
 
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+    const blob = await new Promise((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", quality),
+    );
     if (!blob || blob.size >= file.size) return file;
-    return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
+    return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), {
+      type: "image/jpeg",
+    });
   } finally {
     URL.revokeObjectURL(imageUrl);
   }
 }
 
 async function listProfiles() {
-  return runQuery(requireSupabase().from("profiles").select("id, full_name, email").order("created_at", { ascending: false }));
+  return runQuery(
+    requireSupabase()
+      .from("profiles")
+      .select("id, full_name, name, email")
+      .order("created_at", { ascending: false }),
+  );
 }
 
 async function listLocalChurches(filters = {}) {
-  let query = requireSupabase().from("local_churches").select("*").order("name");
+  let query = requireSupabase()
+    .from("local_churches")
+    .select("*")
+    .order("name");
   if (filters.district) query = query.eq("district", filters.district);
   if (filters.activeOnly) query = query.eq("is_active", true);
   return runQuery(query);
 }
 
 async function listMembers() {
-  return runQuery(requireSupabase()
-    .from("local_church_members_with_church")
-    .select("*")
-    .order("created_at", { ascending: false }));
+  return runQuery(
+    requireSupabase()
+      .from("local_church_members_with_church")
+      .select("*")
+      .order("created_at", { ascending: false }),
+  );
 }
 
 async function getMyMembers(userId) {
-  return runQuery(requireSupabase()
-    .from("local_church_members_with_church")
-    .select("*")
-    .eq("submitted_by", userId)
-    .order("created_at", { ascending: false }));
+  return runQuery(
+    requireSupabase()
+      .from("local_church_members_with_church")
+      .select("*")
+      .eq("submitted_by", userId)
+      .order("created_at", { ascending: false }),
+  );
 }
 
 async function createMember(payload) {
@@ -77,76 +100,433 @@ async function createMember(payload) {
 }
 
 async function updateMyMemberApplication(memberId, payload) {
-  const { data, error } = await requireSupabase().rpc("update_my_member_application", {
-    p_member_id: memberId,
-    p_local_church_id: payload.local_church_id,
-    p_name: payload.name,
-    p_birthday: payload.birthday,
-    p_contact_number: payload.contact_number || null,
-    p_gender: payload.gender || null,
-    p_address: payload.address || null,
-    p_parent_guardian_name: payload.parent_guardian_name || null,
-    p_emergency_contact: payload.emergency_contact || null,
-    p_professing_member: payload.professing_member || "No",
-    p_confirmation_class_year: payload.confirmation_class_year || null,
-    p_confirmation_class_status: payload.confirmation_class_status || "Not Started",
-    p_activity_status: payload.activity_status || "Active",
-  });
+  const { data, error } = await requireSupabase().rpc(
+    "update_my_member_application",
+    {
+      p_member_id: memberId,
+      p_local_church_id: payload.local_church_id,
+      p_name: payload.name,
+      p_birthday: payload.birthday,
+      p_contact_number: payload.contact_number || null,
+      p_gender: payload.gender || null,
+      p_address: payload.address || null,
+      p_parent_guardian_name: payload.parent_guardian_name || null,
+      p_emergency_contact: payload.emergency_contact || null,
+      p_professing_member: payload.professing_member || "No",
+      p_confirmation_class_year: payload.confirmation_class_year || null,
+      p_confirmation_class_status:
+        payload.confirmation_class_status || "Not Started",
+      p_activity_status: payload.activity_status || "Active",
+    },
+  );
   if (error) throw error;
   return data;
 }
 
 async function reviewMember(memberId, status, notes = null) {
-  const { data, error } = await requireSupabase().rpc("admin_review_member_application", {
-    p_member_id: memberId,
-    p_new_status: status,
-    p_admin_notes: notes,
-  });
+  const { data, error } = await requireSupabase().rpc(
+    "admin_review_member_application",
+    {
+      p_member_id: memberId,
+      p_new_status: status,
+      p_admin_notes: notes,
+    },
+  );
   if (error) throw error;
   return data;
 }
 
 async function listEvents() {
-  return runQuery(requireSupabase().from("events").select("*, local_churches(name)").order("event_date", { ascending: false }));
+  return runQuery(
+    requireSupabase()
+      .from("events")
+      .select("*, local_churches(name)")
+      .order("event_date", { ascending: false }),
+  );
 }
 
 async function saveEvent(event) {
   const client = requireSupabase();
   if (event.id) {
-    const { data, error } = await client.from("events").update(event).eq("id", event.id).select("*").single();
+    const { data, error } = await client
+      .from("events")
+      .update(event)
+      .eq("id", event.id)
+      .select("*")
+      .single();
     if (error) throw error;
     return data;
   }
-  const { data, error } = await client.from("events").insert(event).select("*").single();
+  const { data, error } = await client
+    .from("events")
+    .insert(event)
+    .select("*")
+    .single();
   if (error) throw error;
   return data;
 }
 
+async function updateEventPreRegistration(eventId, settings) {
+  const { data, error } = await requireSupabase()
+    .from("events")
+    .update(settings)
+    .eq("id", eventId)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function getEvent(eventId) {
+  const { data, error } = await requireSupabase()
+    .from("events")
+    .select("*, local_churches(name)")
+    .eq("id", eventId)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function listMyChurchMembers() {
+  return runQuery(requireSupabase().rpc("list_my_church_members"));
+}
+
+async function getMyEventRegistration(eventId) {
+  const { data, error } = await requireSupabase()
+    .from("event_registrations")
+    .select("*, event_registration_delegates(*)")
+    .eq("event_id", eventId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function submitEventRegistration({ registration, delegates }) {
+  const client = requireSupabase();
+  let saved;
+  const draftPayload = { ...registration, submission_status: "Draft" };
+
+  if (registration.id) {
+    const {
+      id,
+      event_registration_delegates: _delegates,
+      ...payload
+    } = draftPayload;
+    const { data, error } = await client
+      .from("event_registrations")
+      .update(payload)
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    saved = data;
+    const { error: deleteError } = await client
+      .from("event_registration_delegates")
+      .delete()
+      .eq("registration_id", id);
+    if (deleteError) throw deleteError;
+  } else {
+    const {
+      id: _id,
+      event_registration_delegates: _delegates,
+      ...payload
+    } = draftPayload;
+    const { data, error } = await client
+      .from("event_registrations")
+      .insert(payload)
+      .select("*")
+      .single();
+    if (error) throw error;
+    saved = data;
+  }
+
+  const delegatePayload = delegates.map((delegate, index) => ({
+    registration_id: saved.id,
+    selected_member_id: delegate.selected_member_id || null,
+    row_number: index + 1,
+    name: delegate.name.trim(),
+    age: Number(delegate.age),
+    gender: delegate.gender,
+    health_condition: delegate.health_condition?.trim() || null,
+  }));
+  const { error: delegateError } = await client
+    .from("event_registration_delegates")
+    .insert(delegatePayload);
+  if (delegateError) throw delegateError;
+
+  const { data, error } = await client
+    .from("event_registrations")
+    .update({ submission_status: "Submitted" })
+    .eq("id", saved.id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function listEventRegistrations() {
+  return runQuery(
+    requireSupabase()
+      .from("event_registrations")
+      .select(
+        "*, events(title, description, event_date, venue, image_url), local_churches(name, district), profiles(full_name, name, email), event_registration_delegates(*)",
+      )
+      .order("created_at", { ascending: false }),
+  );
+}
+
+async function listEventRegistrationAnalytics() {
+  return runQuery(
+    requireSupabase()
+      .from("event_registration_analytics")
+      .select("*")
+      .order("event_title"),
+  );
+}
+
+async function updateEventRegistrationPayment(
+  id,
+  paymentStatus,
+  adminNotes = null,
+) {
+  const { data, error } = await requireSupabase()
+    .from("event_registrations")
+    .update({ payment_status: paymentStatus, admin_notes: adminNotes })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function listMerchForms({ publishedOnly = false } = {}) {
+  let query = requireSupabase()
+    .from("merch_preorder_forms")
+    .select("*")
+    .order("preorder_date", { ascending: false });
+  if (publishedOnly) query = query.eq("status", "Published");
+  return runQuery(query);
+}
+
+async function getMerchForm(formId) {
+  const { data, error } = await requireSupabase()
+    .from("merch_preorder_forms")
+    .select("*")
+    .eq("id", formId)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function saveMerchForm(form) {
+  const client = requireSupabase();
+  if (form.id) {
+    const { id, ...payload } = form;
+    const { data, error } = await client
+      .from("merch_preorder_forms")
+      .update(payload)
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return data;
+  }
+  const { data, error } = await client
+    .from("merch_preorder_forms")
+    .insert(form)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function getMyMerchPreorder(formId) {
+  const { data, error } = await requireSupabase()
+    .from("merch_preorders")
+    .select("*, merch_shirt_order_items(*)")
+    .eq("form_id", formId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function submitMerchPreorder({ preorder, shirtItems = [] }) {
+  const client = requireSupabase();
+  let saved;
+  const draftPayload = { ...preorder, submission_status: "Draft" };
+  if (preorder.id) {
+    const { id, merch_shirt_order_items: _items, ...payload } = draftPayload;
+    const { data, error } = await client
+      .from("merch_preorders")
+      .update(payload)
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    saved = data;
+    const { error: deleteError } = await client
+      .from("merch_shirt_order_items")
+      .delete()
+      .eq("preorder_id", id);
+    if (deleteError) throw deleteError;
+  } else {
+    const {
+      id: _id,
+      merch_shirt_order_items: _items,
+      ...payload
+    } = draftPayload;
+    const { data, error } = await client
+      .from("merch_preorders")
+      .insert(payload)
+      .select("*")
+      .single();
+    if (error) throw error;
+    saved = data;
+  }
+
+  if (shirtItems.length) {
+    const rows = shirtItems
+      .filter((item) => Number(item.quantity) > 0)
+      .map((item) => ({
+        preorder_id: saved.id,
+        color: item.color.trim(),
+        size: item.size,
+        quantity: Number(item.quantity),
+      }));
+    if (rows.length) {
+      const { error } = await client
+        .from("merch_shirt_order_items")
+        .insert(rows);
+      if (error) throw error;
+    }
+  }
+
+  const { data, error } = await client
+    .from("merch_preorders")
+    .update({ submission_status: "Submitted" })
+    .eq("id", saved.id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function listMerchPreorders() {
+  return runQuery(
+    requireSupabase()
+      .from("merch_preorders")
+      .select(
+        "*, merch_preorder_forms(title, description, preorder_date, image_url, merch_type, custom_merch_name), local_churches(name, district), profiles(full_name, name, email), merch_shirt_order_items(*)",
+      )
+      .order("created_at", { ascending: false }),
+  );
+}
+
+async function listMerchPreorderAnalytics() {
+  return runQuery(
+    requireSupabase()
+      .from("merch_preorder_analytics")
+      .select("*")
+      .order("title"),
+  );
+}
+
+async function listShirtVariantAnalytics() {
+  return runQuery(
+    requireSupabase()
+      .from("merch_shirt_variant_analytics")
+      .select("*")
+      .order("color"),
+  );
+}
+
+async function updateMerchPreorderPayment(
+  id,
+  paymentStatus,
+  adminNotes = null,
+) {
+  const { data, error } = await requireSupabase()
+    .from("merch_preorders")
+    .update({ payment_status: paymentStatus, admin_notes: adminNotes })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function uploadPrivatePaymentProof(
+  bucket,
+  file,
+  userId,
+  folder = "payments",
+) {
+  const client = requireSupabase();
+  const uploadFile = await compressImageFile(file, {
+    maxWidth: 1400,
+    maxHeight: 1400,
+    quality: 0.84,
+  });
+  const extension = uploadFile.name.split(".").pop();
+  const path = `${userId}/${folder}/${Date.now()}.${extension}`;
+  const { error } = await client.storage
+    .from(bucket)
+    .upload(path, uploadFile, { contentType: uploadFile.type });
+  if (error) throw error;
+  return path;
+}
+
+async function createPaymentProofSignedUrl(bucket, path) {
+  if (!path) return "";
+  const { data, error } = await requireSupabase()
+    .storage.from(bucket)
+    .createSignedUrl(path, 600);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
 async function listEvaluationDetails() {
-  return runQuery(requireSupabase().from("event_evaluation_details").select("*").order("submitted_at", { ascending: false }));
+  return runQuery(
+    requireSupabase()
+      .from("event_evaluation_details")
+      .select("*")
+      .order("submitted_at", { ascending: false }),
+  );
 }
 
 async function listEvaluationAnalytics() {
-  return runQuery(requireSupabase().from("event_evaluation_analytics").select("*").order("event_date", { ascending: false }));
+  return runQuery(
+    requireSupabase()
+      .from("event_evaluation_analytics")
+      .select("*")
+      .order("event_date", { ascending: false }),
+  );
 }
 
 async function listEvaluationRewardHistory(userId = null) {
-  let query = requireSupabase().from("evaluation_reward_history").select("*, events(title), profiles(full_name, email)").order("created_at", { ascending: false });
+  let query = requireSupabase()
+    .from("evaluation_reward_history")
+    .select("*, events(title), profiles(full_name, name, email)")
+    .order("created_at", { ascending: false });
   if (userId) query = query.eq("user_id", userId);
   return runQuery(query);
 }
 
 async function submitEvaluation(payload) {
-  const { data, error } = await requireSupabase().rpc("submit_event_evaluation", {
-    p_event_id: payload.event_id,
-    p_accommodation: payload.accommodation,
-    p_time_management: payload.time_management,
-    p_objectives_of_the_event: payload.objectives_of_the_event,
-    p_organization_of_the_program: payload.organization_of_the_program,
-    p_effectiveness_of_resource_speakers: payload.effectiveness_of_resource_speakers,
-    p_committee_heads_and_staffs: payload.committee_heads_and_staffs,
-    p_comment: payload.comment || null,
-  });
+  const { data, error } = await requireSupabase().rpc(
+    "submit_event_evaluation",
+    {
+      p_event_id: payload.event_id,
+      p_accommodation: payload.accommodation,
+      p_time_management: payload.time_management,
+      p_objectives_of_the_event: payload.objectives_of_the_event,
+      p_organization_of_the_program: payload.organization_of_the_program,
+      p_effectiveness_of_resource_speakers:
+        payload.effectiveness_of_resource_speakers,
+      p_committee_heads_and_staffs: payload.committee_heads_and_staffs,
+      p_comment: payload.comment || null,
+    },
+  );
   if (error) throw error;
   return data;
 }
@@ -155,24 +535,38 @@ async function listImageSubmissions() {
   return runQuery(
     requireSupabase()
       .from("image_submissions")
-      .select("*, events(title), local_churches(name), profiles!image_submissions_submitted_by_fkey(id, full_name)")
-      .order("created_at", { ascending: false })
+      .select(
+        "*, events(title), local_churches(name), profiles!image_submissions_submitted_by_fkey(id, full_name, name)",
+      )
+      .order("created_at", { ascending: false }),
   );
 }
 
-async function uploadImageSubmission({ file, caption, event_id, local_church_id, userId }) {
+async function uploadImageSubmission({
+  file,
+  caption,
+  event_id,
+  local_church_id,
+  userId,
+}) {
   const client = requireSupabase();
   const uploadFile = await compressImageFile(file);
   const extension = uploadFile.name.split(".").pop();
   const path = `image-submissions/${userId}/${Date.now()}.${extension}`;
-  const { error: uploadError } = await client.storage.from("nelpac-images").upload(path, uploadFile, { upsert: false, contentType: uploadFile.type });
+  const { error: uploadError } = await client.storage
+    .from("nelpac-images")
+    .upload(path, uploadFile, { upsert: false, contentType: uploadFile.type });
   if (uploadError) {
     if (uploadError.message?.toLowerCase().includes("bucket not found")) {
-      throw new Error("Storage bucket not found. Create a public Supabase Storage bucket named nelpac-images, then try again.");
+      throw new Error(
+        "Storage bucket not found. Create a public Supabase Storage bucket named nelpac-images, then try again.",
+      );
     }
     throw uploadError;
   }
-  const { data: publicUrl } = client.storage.from("nelpac-images").getPublicUrl(path);
+  const { data: publicUrl } = client.storage
+    .from("nelpac-images")
+    .getPublicUrl(path);
   const { data, error } = await client
     .from("image_submissions")
     .insert({
@@ -195,10 +589,14 @@ async function uploadStorageImage(bucket, file, folder, userId) {
   const extension = uploadFile.name.split(".").pop();
   const safeFolder = folder || "uploads";
   const path = `${safeFolder}/${userId}/${Date.now()}.${extension}`;
-  const { error } = await client.storage.from(bucket).upload(path, uploadFile, { upsert: false, contentType: uploadFile.type });
+  const { error } = await client.storage
+    .from(bucket)
+    .upload(path, uploadFile, { upsert: false, contentType: uploadFile.type });
   if (error) {
     if (error.message?.toLowerCase().includes("bucket not found")) {
-      throw new Error(`Storage bucket not found. Create a Supabase Storage bucket named ${bucket}, then try again.`);
+      throw new Error(
+        `Storage bucket not found. Create a Supabase Storage bucket named ${bucket}, then try again.`,
+      );
     }
     throw error;
   }
@@ -207,58 +605,90 @@ async function uploadStorageImage(bucket, file, folder, userId) {
 }
 
 async function reviewImageSubmission(submissionId, status, notes = null) {
-  const { data, error } = await requireSupabase().rpc("admin_review_image_submission", {
-    p_submission_id: submissionId,
-    p_new_status: status,
-    p_admin_notes: notes,
-  });
+  const { data, error } = await requireSupabase().rpc(
+    "admin_review_image_submission",
+    {
+      p_submission_id: submissionId,
+      p_new_status: status,
+      p_admin_notes: notes,
+    },
+  );
   if (error) throw error;
   return data;
 }
 
 async function listPointBalances() {
-  return runQuery(requireSupabase().from("one_card_point_balances").select("*").order("full_name"));
+  return runQuery(
+    requireSupabase()
+      .from("one_card_point_balances")
+      .select("*")
+      .order("full_name"),
+  );
 }
 
 async function listPointLedger(userId = null) {
-  let query = requireSupabase().from("one_card_points").select("*, events(title)").order("created_at", { ascending: false });
+  let query = requireSupabase()
+    .from("one_card_points")
+    .select("*, events(title)")
+    .order("created_at", { ascending: false });
   if (userId) query = query.eq("user_id", userId);
   return runQuery(query);
 }
 
 async function createPointsEntry(payload) {
-  const { data, error } = await requireSupabase().rpc("admin_create_points_entry", {
-    p_user_id: payload.user_id,
-    p_points: Number(payload.points),
-    p_description: payload.description,
-    p_entry_type: payload.entry_type || "earned",
-    p_event_id: payload.event_id || null,
-  });
+  const { data, error } = await requireSupabase().rpc(
+    "admin_create_points_entry",
+    {
+      p_user_id: payload.user_id,
+      p_points: Number(payload.points),
+      p_description: payload.description,
+      p_entry_type: payload.entry_type || "earned",
+      p_event_id: payload.event_id || null,
+    },
+  );
   if (error) throw error;
   return data;
 }
 
 async function listPosts({ publishedOnly = false } = {}) {
-  let query = requireSupabase().from("posts_or_announcements").select("*").order("published_at", { ascending: false, nullsFirst: false });
+  let query = requireSupabase()
+    .from("posts_or_announcements")
+    .select("*")
+    .order("published_at", { ascending: false, nullsFirst: false });
   if (publishedOnly) query = query.eq("status", "Published");
   return runQuery(query);
 }
 
 async function savePost(post) {
   const client = requireSupabase();
-  const payload = post.status === "Published" && !post.published_at ? { ...post, published_at: new Date().toISOString() } : post;
+  const payload =
+    post.status === "Published" && !post.published_at
+      ? { ...post, published_at: new Date().toISOString() }
+      : post;
   if (payload.id) {
-    const { data, error } = await client.from("posts_or_announcements").update(payload).eq("id", payload.id).select("*").single();
+    const { data, error } = await client
+      .from("posts_or_announcements")
+      .update(payload)
+      .eq("id", payload.id)
+      .select("*")
+      .single();
     if (error) throw error;
     return data;
   }
-  const { data, error } = await client.from("posts_or_announcements").insert(payload).select("*").single();
+  const { data, error } = await client
+    .from("posts_or_announcements")
+    .insert(payload)
+    .select("*")
+    .single();
   if (error) throw error;
   return data;
 }
 
 async function listRewards({ activeOnly = false } = {}) {
-  let query = requireSupabase().from("rewards").select("*").order("required_points");
+  let query = requireSupabase()
+    .from("rewards")
+    .select("*")
+    .order("required_points");
   if (activeOnly) query = query.eq("is_active", true);
   return runQuery(query);
 }
@@ -266,52 +696,79 @@ async function listRewards({ activeOnly = false } = {}) {
 async function saveReward(reward) {
   const client = requireSupabase();
   if (reward.id) {
-    const { data, error } = await client.from("rewards").update(reward).eq("id", reward.id).select("*").single();
+    const { data, error } = await client
+      .from("rewards")
+      .update(reward)
+      .eq("id", reward.id)
+      .select("*")
+      .single();
     if (error) throw error;
     return data;
   }
-  const { data, error } = await client.from("rewards").insert(reward).select("*").single();
+  const { data, error } = await client
+    .from("rewards")
+    .insert(reward)
+    .select("*")
+    .single();
   if (error) throw error;
   return data;
 }
 
 async function submitRewardClaim(rewardId) {
-  const { data, error } = await requireSupabase().rpc("submit_reward_claim", { p_reward_id: rewardId });
-  if (error) throw error;
-  return data;
-}
-
-async function listRewardClaims() {
-  return runQuery(requireSupabase().from("reward_claims_with_rewards").select("*").order("created_at", { ascending: false }));
-}
-
-async function reviewRewardClaim(claimId, status, notes = null) {
-  const { data, error } = await requireSupabase().rpc("admin_review_reward_claim", {
-    p_claim_id: claimId,
-    p_new_status: status,
-    p_admin_notes: notes,
+  const { data, error } = await requireSupabase().rpc("submit_reward_claim", {
+    p_reward_id: rewardId,
   });
   if (error) throw error;
   return data;
 }
 
+async function listRewardClaims() {
+  return runQuery(
+    requireSupabase()
+      .from("reward_claims_with_rewards")
+      .select("*")
+      .order("created_at", { ascending: false }),
+  );
+}
+
+async function reviewRewardClaim(claimId, status, notes = null) {
+  const { data, error } = await requireSupabase().rpc(
+    "admin_review_reward_claim",
+    {
+      p_claim_id: claimId,
+      p_new_status: status,
+      p_admin_notes: notes,
+    },
+  );
+  if (error) throw error;
+  return data;
+}
+
 async function markRewardClaimClaimed(claimId) {
-  const { data, error } = await requireSupabase().rpc("admin_mark_reward_claim_claimed", { p_claim_id: claimId });
+  const { data, error } = await requireSupabase().rpc(
+    "admin_mark_reward_claim_claimed",
+    { p_claim_id: claimId },
+  );
   if (error) throw error;
   return data;
 }
 
 async function listRedeemCodes(userId = null) {
-  let query = requireSupabase().from("redeem_codes").select("*").order("created_at", { ascending: false });
+  let query = requireSupabase()
+    .from("redeem_codes")
+    .select("*")
+    .order("created_at", { ascending: false });
   if (userId) query = query.eq("user_id", userId);
   return runQuery(query);
 }
 
 async function listOneCardRedeemCodes() {
-  return runQuery(requireSupabase()
-    .from("one_card_redeem_codes_with_usage")
-    .select("*")
-    .order("created_at", { ascending: false }));
+  return runQuery(
+    requireSupabase()
+      .from("one_card_redeem_codes_with_usage")
+      .select("*")
+      .order("created_at", { ascending: false }),
+  );
 }
 
 async function saveOneCardRedeemCode(payload) {
@@ -325,43 +782,68 @@ async function saveOneCardRedeemCode(payload) {
     p_event_id: payload.event_id || null,
   };
   const { data, error } = payload.id
-    ? await client.rpc("admin_update_one_card_redeem_code", { p_code_id: payload.id, ...args })
+    ? await client.rpc("admin_update_one_card_redeem_code", {
+        p_code_id: payload.id,
+        ...args,
+      })
     : await client.rpc("admin_create_one_card_redeem_code", args);
   if (error) throw error;
   return data;
 }
 
 async function redeemOneCardCode(code) {
-  const { data, error } = await requireSupabase().rpc("redeem_one_card_code", { p_code: code });
-  if (error) throw error;
-  return data;
-}
-
-async function listNotifications(userId = null) {
-  let query = requireSupabase().from("notifications").select("*").order("created_at", { ascending: false });
-  if (userId) query = query.eq("user_id", userId);
-  return runQuery(query);
-}
-
-async function markNotificationRead(notificationId) {
-  const { data, error } = await requireSupabase().rpc("mark_notification_read", { p_notification_id: notificationId });
-  if (error) throw error;
-  return data;
-}
-
-async function logPasswordResetActivity({ email = null, activityType, success = true, detail = null }) {
-  const { data, error } = await requireSupabase().rpc("log_password_reset_activity", {
-    p_email: email,
-    p_activity_type: activityType,
-    p_success: success,
-    p_detail: detail,
+  const { data, error } = await requireSupabase().rpc("redeem_one_card_code", {
+    p_code: code,
   });
   if (error) throw error;
   return data;
 }
 
+async function listNotifications(userId = null) {
+  let query = requireSupabase()
+    .from("notifications")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (userId) query = query.eq("user_id", userId);
+  return runQuery(query);
+}
+
+async function markNotificationRead(notificationId) {
+  const { data, error } = await requireSupabase().rpc(
+    "mark_notification_read",
+    { p_notification_id: notificationId },
+  );
+  if (error) throw error;
+  return data;
+}
+
+async function logPasswordResetActivity({
+  email = null,
+  activityType,
+  success = true,
+  detail = null,
+}) {
+  const { data, error } = await requireSupabase().rpc(
+    "log_password_reset_activity",
+    {
+      p_email: email,
+      p_activity_type: activityType,
+      p_success: success,
+      p_detail: detail,
+    },
+  );
+  if (error) throw error;
+  return data;
+}
+
 async function listAuditLogs() {
-  return runQuery(requireSupabase().from("audit_logs").select("*").order("created_at", { ascending: false }).limit(100));
+  return runQuery(
+    requireSupabase()
+      .from("audit_logs")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(100),
+  );
 }
 
 async function updateMyProfile(payload) {
@@ -376,13 +858,21 @@ async function updateMyProfile(payload) {
 
 async function uploadProfileAvatar(file, userId) {
   const client = requireSupabase();
-  const uploadFile = await compressImageFile(file, { maxWidth: 900, maxHeight: 900, quality: 0.85 });
+  const uploadFile = await compressImageFile(file, {
+    maxWidth: 900,
+    maxHeight: 900,
+    quality: 0.85,
+  });
   const extension = uploadFile.name.split(".").pop();
   const path = `avatars/${userId}/${Date.now()}.${extension}`;
-  const { error } = await client.storage.from("nelpac-images").upload(path, uploadFile, { upsert: true, contentType: uploadFile.type });
+  const { error } = await client.storage
+    .from("nelpac-images")
+    .upload(path, uploadFile, { upsert: true, contentType: uploadFile.type });
   if (error) {
     if (error.message?.toLowerCase().includes("bucket not found")) {
-      throw new Error("Storage bucket not found. Create a public Supabase Storage bucket named nelpac-images, then try again.");
+      throw new Error(
+        "Storage bucket not found. Create a public Supabase Storage bucket named nelpac-images, then try again.",
+      );
     }
     throw error;
   }
@@ -404,13 +894,24 @@ export {
   createPointsEntry,
   compressImageFile,
   getMyMembers,
+  getEvent,
+  getMerchForm,
+  getMyEventRegistration,
+  getMyMerchPreorder,
   listAuditLogs,
   listEvents,
+  listEventRegistrations,
+  listEventRegistrationAnalytics,
   listEvaluationAnalytics,
   listEvaluationDetails,
   listEvaluationRewardHistory,
   listImageSubmissions,
   listLocalChurches,
+  listMyChurchMembers,
+  listMerchForms,
+  listMerchPreorders,
+  listMerchPreorderAnalytics,
+  listShirtVariantAnalytics,
   listMembers,
   listNotifications,
   listPointBalances,
@@ -430,11 +931,14 @@ export {
   reviewRewardClaim,
   runQuery,
   saveEvent,
+  saveMerchForm,
   saveOneCardRedeemCode,
   savePost,
   saveReward,
   setUserRole,
   submitEvaluation,
+  submitEventRegistration,
+  submitMerchPreorder,
   redeemOneCardCode,
   submitRewardClaim,
   updateMyMemberApplication,
@@ -442,4 +946,9 @@ export {
   uploadProfileAvatar,
   uploadImageSubmission,
   uploadStorageImage,
+  uploadPrivatePaymentProof,
+  createPaymentProofSignedUrl,
+  updateEventRegistrationPayment,
+  updateEventPreRegistration,
+  updateMerchPreorderPayment,
 };

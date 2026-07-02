@@ -1,14 +1,16 @@
 import { useMemo, useState } from "react";
+import { CalendarDays, Images, MapPin, UserRound } from "lucide-react";
 import {
   EmptyState,
   ErrorState,
   LoadingState,
 } from "../../components/DataState";
 import { ImageLightbox } from "../../components/ImageLightbox";
-import { useSupabaseData } from "../../lib/useSupabaseData";
+import { getProfileDisplayName } from "../../lib/profileNames";
 import { listImageSubmissions, listProfiles } from "../../lib/supabaseServices";
+import { useSupabaseData } from "../../lib/useSupabaseData";
 
-function ImageGallery() {
+function ImageGallery({ embedded = false, viewMode = "tiles" }) {
   const {
     data: images,
     loading: imagesLoading,
@@ -22,47 +24,44 @@ function ImageGallery() {
   const [viewer, setViewer] = useState(null);
   const approved = images.filter((image) => image.status === "Approved");
   const uploaderById = useMemo(
-    () => new Map((profiles || []).map((profile) => [profile.id, profile.full_name])),
-    [profiles]
+    () =>
+      new Map(
+        (profiles || []).map((profile) => [
+          profile.id,
+          getProfileDisplayName(profile),
+        ]),
+      ),
+    [profiles],
   );
   const loading = imagesLoading || profilesLoading;
   const error = imagesError || profilesError;
 
-  console.debug("[ImageGallery] profiles", profiles);
-  console.debug("[ImageGallery] uploaderById", Object.fromEntries(uploaderById));
-  console.debug(
-    "[ImageGallery] submitter matches",
-    approved.map((image) => ({
-      id: image.id,
-      submitted_by: image.submitted_by,
-      matched: uploaderById.has(image.submitted_by),
-      full_name: uploaderById.get(image.submitted_by),
-    }))
-  );
-
   if (loading) return <LoadingState label="Loading gallery..." />;
   return (
     <div className="space-y-5">
-      <div>
-        <h1
-          className="text-slate-900"
-          style={{ fontSize: "22px", fontWeight: 700 }}
-        >
-          Image Gallery
-        </h1>
-        <p className="text-slate-500 text-sm">
-          Approved community image submissions
-        </p>
-      </div>
+      {!embedded && (
+        <div>
+          <h1 className="text-2xl font-black text-slate-900">Image Gallery</h1>
+          <p className="text-sm text-slate-500">
+            Approved community image submissions
+          </p>
+        </div>
+      )}
       <ErrorState message={error} />
       {approved.length === 0 ? (
         <EmptyState label="No approved images yet." />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div
+          className={
+            viewMode === "tiles"
+              ? "grid gap-5 sm:grid-cols-2 xl:grid-cols-3"
+              : "space-y-4"
+          }
+        >
           {approved.map((image) => (
-            <div
+            <article
               key={image.id}
-              className="bg-white rounded-2xl overflow-hidden border border-slate-100"
+              className={`overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:shadow-lg ${viewMode === "content" ? "md:grid md:grid-cols-[20rem_1fr]" : ""}`}
             >
               <button
                 type="button"
@@ -72,26 +71,44 @@ function ImageGallery() {
                     alt: image.caption || "Gallery image",
                   })
                 }
-                className="block w-full bg-slate-100"
+                className={`group block w-full overflow-hidden bg-slate-100 ${viewMode === "content" ? "h-full min-h-60" : "h-64"}`}
               >
                 <img
                   src={image.image_url}
                   alt={image.caption || "Gallery image"}
-                  className="w-full max-h-80 object-contain"
+                  className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
                 />
               </button>
-              <div className="p-4">
-                <p className="text-sm" style={{ fontWeight: 700 }}>
-                  {image.caption || "No caption"}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {image.events?.title || "No event"} - {image.local_churches?.name || "No church"}
-                </p>
-                <p className="text-xs text-slate-500">
-                  Uploaded by {image.profiles?.full_name || uploaderById.get(image.submitted_by) || "Unknown user"}
-                </p>
+              <div className="p-5 sm:p-6">
+                <div className="flex items-start justify-between gap-3">
+                  <h2 className="font-black leading-snug text-slate-950">
+                    {image.caption || "Community moment"}
+                  </h2>
+                  <Images size={17} className="shrink-0 text-violet-600" />
+                </div>
+                <div className="mt-4 space-y-2 text-xs font-semibold text-slate-500">
+                  <p className="flex items-center gap-2">
+                    <CalendarDays size={14} />{" "}
+                    {image.events?.title || "Community upload"}
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <MapPin size={14} />{" "}
+                    {image.local_churches?.name || "NELPAC community"}
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <UserRound size={14} />{" "}
+                    {getProfileDisplayName(image.profiles, "") ||
+                      uploaderById.get(image.submitted_by) ||
+                      "Community member"}
+                  </p>
+                </div>
+                {viewMode === "content" && (
+                  <p className="mt-5 text-sm leading-6 text-slate-600">
+                    Click the photo to open the full-size image.
+                  </p>
+                )}
               </div>
-            </div>
+            </article>
           ))}
         </div>
       )}

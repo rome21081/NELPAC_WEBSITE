@@ -1,40 +1,132 @@
 import { useState } from "react";
-import { FileText } from "lucide-react";
-import { EmptyState, ErrorState, LoadingState } from "../../components/DataState";
+import { CalendarDays, ChevronDown, ChevronUp, Newspaper } from "lucide-react";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+} from "../../components/DataState";
 import { ImageLightbox } from "../../components/ImageLightbox";
-import { useSupabaseData } from "../../lib/useSupabaseData";
 import { listPosts } from "../../lib/supabaseServices";
+import { useSupabaseData } from "../../lib/useSupabaseData";
 
 function PostPlaceholder() {
-  return <div className="mb-3 flex h-40 w-full items-center justify-center rounded-xl bg-slate-100 text-slate-400">
-    <div className="text-center"><FileText className="mx-auto mb-2" style={{ width: 24, height: 24 }} /><p className="text-xs">No post image</p></div>
-  </div>;
+  return (
+    <div className="flex h-48 w-full items-center justify-center bg-slate-100 text-slate-400">
+      <div className="text-center">
+        <Newspaper className="mx-auto mb-2" size={27} />
+        <p className="text-xs font-semibold">No post image</p>
+      </div>
+    </div>
+  );
 }
 
-function UserPosts() {
-  const { data: posts, loading, error } = useSupabaseData(() => listPosts({ publishedOnly: true }), []);
+function UserPosts({ embedded = false, viewMode = "tiles" }) {
+  const {
+    data: posts,
+    loading,
+    error,
+  } = useSupabaseData(() => listPosts({ publishedOnly: true }), []);
   const [viewer, setViewer] = useState(null);
   const [expanded, setExpanded] = useState({});
   if (loading) return <LoadingState label="Loading posts..." />;
-  return <div className="space-y-5">
-    <div><h1 className="text-slate-900" style={{ fontSize: "22px", fontWeight: 700 }}>Posts & News</h1><p className="text-slate-500 text-sm">Published announcements and activities</p></div>
-    <ErrorState message={error} />
-    {posts.length === 0 ? <EmptyState label="No published posts." /> : <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      {posts.map((post) => {
-        const isExpanded = Boolean(expanded[post.id]);
-        const body = post.body || "";
-        const preview = body.length > 220 ? `${body.slice(0, 220).trim()}...` : body;
-        return <article key={post.id} className="bg-white rounded-2xl p-5 border border-slate-100">
-        {post.image_url ? <button type="button" onClick={() => setViewer({ src: post.image_url, alt: post.title })} className="mb-4 block w-full rounded-xl bg-slate-100"><img src={post.image_url} alt={post.title} className="max-h-72 w-full rounded-xl object-contain" /></button> : <PostPlaceholder />}
-        <div className="flex items-start justify-between gap-3"><h2 className="text-slate-900" style={{ fontWeight: 800 }}>{post.title}</h2><span className="shrink-0 text-xs bg-slate-100 rounded-full px-2 py-1">{post.category}</span></div>
-        <p className="text-slate-500 text-xs mt-1">{post.published_at?.slice(0, 10)}</p>
-        <p className="text-slate-600 text-sm mt-3 leading-6 whitespace-pre-line">{isExpanded ? body : preview}</p>
-        {body.length > 220 && <button onClick={() => setExpanded((current) => ({ ...current, [post.id]: !isExpanded }))} className="mt-3 rounded-xl border border-slate-200 px-3 py-2 text-sm text-blue-700">{isExpanded ? "See less" : "See more"}</button>}
-      </article>;
-      })}
-    </div>}
-    <ImageLightbox image={viewer} onClose={() => setViewer(null)} />
-  </div>;
+
+  return (
+    <div className="space-y-5">
+      {!embedded && (
+        <div>
+          <h1 className="text-2xl font-black text-slate-900">
+            Posts & Activities
+          </h1>
+          <p className="text-sm text-slate-500">
+            Published announcements and community updates
+          </p>
+        </div>
+      )}
+      <ErrorState message={error} />
+      {posts.length === 0 ? (
+        <EmptyState label="No published posts." />
+      ) : (
+        <div
+          className={
+            viewMode === "tiles"
+              ? "grid gap-5 md:grid-cols-2 xl:grid-cols-3"
+              : "space-y-4"
+          }
+        >
+          {posts.map((post) => {
+            const isExpanded = Boolean(expanded[post.id]);
+            const body = post.body || "";
+            const previewLength = viewMode === "content" ? 420 : 180;
+            const preview =
+              body.length > previewLength
+                ? `${body.slice(0, previewLength).trim()}...`
+                : body;
+            return (
+              <article
+                key={post.id}
+                className={`overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:shadow-lg ${viewMode === "content" ? "md:grid md:grid-cols-[18rem_1fr]" : ""}`}
+              >
+                {post.image_url ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setViewer({ src: post.image_url, alt: post.title })
+                    }
+                    className={`block w-full bg-slate-100 ${viewMode === "content" ? "h-full min-h-56" : "h-52"}`}
+                  >
+                    <img
+                      src={post.image_url}
+                      alt={post.title}
+                      className="h-full w-full object-cover"
+                    />
+                  </button>
+                ) : (
+                  <PostPlaceholder />
+                )}
+                <div className="p-5 sm:p-6">
+                  <div className="flex items-start justify-between gap-3">
+                    <h2 className="text-lg font-black leading-snug text-slate-950">
+                      {post.title}
+                    </h2>
+                    <span className="shrink-0 rounded-full bg-cyan-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-cyan-800">
+                      {post.category}
+                    </span>
+                  </div>
+                  <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+                    <CalendarDays size={13} />{" "}
+                    {post.published_at?.slice(0, 10) || "Recently published"}
+                  </p>
+                  <p className="mt-4 whitespace-pre-line text-sm leading-6 text-slate-600">
+                    {isExpanded ? body : preview}
+                  </p>
+                  {body.length > previewLength && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpanded((current) => ({
+                          ...current,
+                          [post.id]: !isExpanded,
+                        }))
+                      }
+                      className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                    >
+                      {isExpanded ? (
+                        <ChevronUp size={15} />
+                      ) : (
+                        <ChevronDown size={15} />
+                      )}
+                      {isExpanded ? "Show less" : "Read full post"}
+                    </button>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+      <ImageLightbox image={viewer} onClose={() => setViewer(null)} />
+    </div>
+  );
 }
 
 export { UserPosts };

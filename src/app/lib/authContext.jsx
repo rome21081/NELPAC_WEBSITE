@@ -7,7 +7,7 @@ async function fetchProfile(userId) {
   if (!userId) return null;
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, role, full_name, email, avatar_url, contact_number")
+    .select("id, role, full_name, name, name_completed, email, avatar_url, contact_number")
     .eq("id", userId)
     .single();
   if (error) throw error;
@@ -32,7 +32,9 @@ function AuthProvider({ children }) {
       }
 
       const currentSession = data.session;
-      const currentProfile = currentSession?.user ? await fetchProfile(currentSession.user.id) : null;
+      const currentProfile = currentSession?.user
+        ? await fetchProfile(currentSession.user.id)
+        : null;
       if (alive) {
         setSession(currentSession);
         setProfile(currentProfile);
@@ -42,22 +44,24 @@ function AuthProvider({ children }) {
 
     loadSession();
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      if (!nextSession?.user) {
-        setProfile(null);
-        setLoading(false);
-        return;
-      }
-
-      fetchProfile(nextSession.user.id)
-        .then(setProfile)
-        .catch((error) => {
-          console.error("Unable to load profile", error);
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, nextSession) => {
+        setSession(nextSession);
+        if (!nextSession?.user) {
           setProfile(null);
-        })
-        .finally(() => setLoading(false));
-    });
+          setLoading(false);
+          return;
+        }
+
+        fetchProfile(nextSession.user.id)
+          .then(setProfile)
+          .catch((error) => {
+            console.error("Unable to load profile", error);
+            setProfile(null);
+          })
+          .finally(() => setLoading(false));
+      },
+    );
 
     return () => {
       alive = false;
@@ -65,18 +69,21 @@ function AuthProvider({ children }) {
     };
   }, []);
 
-  const value = useMemo(() => ({
-    session,
-    user: session?.user || null,
-    profile,
-    loading,
-    refreshProfile: async () => {
-      const nextProfile = await fetchProfile(session?.user?.id);
-      setProfile(nextProfile);
-      return nextProfile;
-    },
-    signOut: () => supabase.auth.signOut(),
-  }), [loading, profile, session]);
+  const value = useMemo(
+    () => ({
+      session,
+      user: session?.user || null,
+      profile,
+      loading,
+      refreshProfile: async () => {
+        const nextProfile = await fetchProfile(session?.user?.id);
+        setProfile(nextProfile);
+        return nextProfile;
+      },
+      signOut: () => supabase.auth.signOut(),
+    }),
+    [loading, profile, session],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
@@ -87,7 +94,4 @@ function useAuth() {
   return context;
 }
 
-export {
-  AuthProvider,
-  useAuth,
-};
+export { AuthProvider, useAuth };

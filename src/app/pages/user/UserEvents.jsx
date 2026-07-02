@@ -1,35 +1,119 @@
 import { useState } from "react";
-import { Calendar } from "lucide-react";
-import { EmptyState, ErrorState, LoadingState } from "../../components/DataState";
+import { CalendarDays, ClipboardPenLine, MapPin } from "lucide-react";
+import { Link } from "react-router";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+} from "../../components/DataState";
 import { ImageLightbox } from "../../components/ImageLightbox";
-import { useSupabaseData } from "../../lib/useSupabaseData";
 import { listEvents } from "../../lib/supabaseServices";
+import { useSupabaseData } from "../../lib/useSupabaseData";
 
-function ImagePlaceholder({ label }) {
-  return <div className="mb-3 flex h-40 w-full items-center justify-center rounded-xl bg-slate-100 text-slate-400">
-    <div className="text-center"><Calendar className="mx-auto mb-2" style={{ width: 24, height: 24 }} /><p className="text-xs">{label}</p></div>
-  </div>;
+function ImagePlaceholder() {
+  return (
+    <div className="flex h-48 w-full items-center justify-center bg-slate-100 text-slate-400">
+      <div className="text-center">
+        <CalendarDays className="mx-auto mb-2" size={27} />
+        <p className="text-xs font-semibold">No event image</p>
+      </div>
+    </div>
+  );
 }
 
-function UserEvents() {
-  const { data: events, loading, error } = useSupabaseData(() => listEvents(), []);
+function UserEvents({ embedded = false, viewMode = "tiles" }) {
+  const {
+    data: events,
+    loading,
+    error,
+  } = useSupabaseData(() => listEvents(), []);
   const [viewer, setViewer] = useState(null);
-  const visible = events.filter((event) => ["Published", "Completed"].includes(event.status));
+  const visible = events.filter((event) =>
+    ["Published", "Completed"].includes(event.status),
+  );
   if (loading) return <LoadingState label="Loading events..." />;
-  return <div className="space-y-5">
-    <div><h1 className="text-slate-900" style={{ fontSize: "22px", fontWeight: 700 }}>Events</h1><p className="text-slate-500 text-sm">Published NELPAC events</p></div>
-    <ErrorState message={error} />
-    {visible.length === 0 ? <EmptyState label="No published events." /> : <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {visible.map((event) => <div key={event.id} className="bg-white rounded-2xl p-5 border border-slate-100">
-        {event.image_url ? <button type="button" onClick={() => setViewer({ src: event.image_url, alt: event.title })} className="mb-3 block w-full rounded-xl bg-slate-100"><img src={event.image_url} alt={event.title} className="max-h-72 w-full rounded-xl object-contain" /></button> : <ImagePlaceholder label="No event image" />}
-        <h2 style={{ fontWeight: 700 }}>{event.title}</h2>
-        <p className="text-slate-500 text-sm">{event.event_date} - {event.venue || "No venue"}</p>
-        <p className="text-slate-600 text-sm mt-3">{event.description || "No description."}</p>
-        <span className="inline-block mt-3 text-xs rounded-full bg-slate-100 px-2 py-1">{event.status}</span>
-      </div>)}
-    </div>}
-    <ImageLightbox image={viewer} onClose={() => setViewer(null)} />
-  </div>;
+
+  return (
+    <div className="space-y-5">
+      {!embedded && (
+        <div>
+          <h1 className="text-2xl font-black text-slate-900">Events</h1>
+          <p className="text-sm text-slate-500">Published NELPAC events</p>
+        </div>
+      )}
+      <ErrorState message={error} />
+      {visible.length === 0 ? (
+        <EmptyState label="No published events." />
+      ) : (
+        <div
+          className={
+            viewMode === "tiles"
+              ? "grid gap-5 md:grid-cols-2 xl:grid-cols-3"
+              : "space-y-4"
+          }
+        >
+          {visible.map((event) => (
+            <article
+              key={event.id}
+              className={`overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${viewMode === "content" ? "md:grid md:grid-cols-[18rem_1fr]" : ""}`}
+            >
+              {event.image_url ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setViewer({ src: event.image_url, alt: event.title })
+                  }
+                  className={`block w-full bg-slate-100 ${viewMode === "content" ? "h-full min-h-56" : "h-52"}`}
+                >
+                  <img
+                    src={event.image_url}
+                    alt={event.title}
+                    className="h-full w-full object-cover"
+                  />
+                </button>
+              ) : (
+                <ImagePlaceholder />
+              )}
+              <div className="flex flex-col p-5 sm:p-6">
+                <div className="flex items-start justify-between gap-3">
+                  <h2 className="text-lg font-black leading-snug text-slate-950">
+                    {event.title}
+                  </h2>
+                  <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-slate-600">
+                    {event.status}
+                  </span>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs font-semibold text-slate-500">
+                  <span className="inline-flex items-center gap-1.5">
+                    <CalendarDays size={14} /> {event.event_date}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <MapPin size={14} /> {event.venue || "Venue TBA"}
+                  </span>
+                </div>
+                <p
+                  className={`mt-4 text-sm leading-6 text-slate-600 ${viewMode === "tiles" ? "line-clamp-3" : "whitespace-pre-line"}`}
+                >
+                  {event.description || "No description provided."}
+                </p>
+                {event.status === "Published" &&
+                  event.pre_registration_enabled && (
+                    <Link
+                      to={`/user/forms?type=registration&event=${event.id}`}
+                      className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-extrabold text-white transition hover:bg-blue-800"
+                    >
+                      <ClipboardPenLine size={17} /> Pre-Register · ₱
+                      {Number(event.registration_fee).toLocaleString()}
+                    </Link>
+                  )}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+      <ImageLightbox image={viewer} onClose={() => setViewer(null)} />
+    </div>
+  );
 }
 
 export { UserEvents };

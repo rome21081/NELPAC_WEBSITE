@@ -137,6 +137,7 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   role public.user_role not null default 'user',
   full_name text not null default '',
+  name_completed boolean not null default false,
   email text unique,
   avatar_url text,
   contact_number text,
@@ -144,8 +145,16 @@ create table if not exists public.profiles (
   updated_at timestamptz not null default now()
 );
 
+-- Keep the legacy name column for deployed databases while using full_name for
+-- all new profile updates. Existing values are never removed or split.
+alter table public.profiles
+  add column if not exists full_name text,
+  add column if not exists name text,
+  add column if not exists name_completed boolean not null default false;
+
 comment on table public.profiles is 'Public app profile for every Supabase Auth user.';
 comment on column public.profiles.role is 'Only admins should change this. Normal users are always user.';
+comment on column public.profiles.name_completed is 'True only after all required profile details are saved: first name, last name, and contact number.';
 
 drop trigger if exists set_profiles_updated_at on public.profiles;
 create trigger set_profiles_updated_at
@@ -201,10 +210,12 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles (id, full_name, email, contact_number, avatar_url, role)
+  insert into public.profiles (id, full_name, name_completed, email, contact_number, avatar_url, role)
   values (
     new.id,
     coalesce(new.raw_user_meta_data ->> 'full_name', new.raw_user_meta_data ->> 'name', ''),
+    coalesce((new.raw_user_meta_data ->> 'profile_name_completed')::boolean, false)
+      and nullif(trim(new.raw_user_meta_data ->> 'contact_number'), '') is not null,
     new.email,
     new.raw_user_meta_data ->> 'contact_number',
     new.raw_user_meta_data ->> 'avatar_url',
@@ -276,9 +287,29 @@ begin
     raise exception 'Not authenticated';
   end if;
 
+  if p_full_name is not null
+    and array_length(regexp_split_to_array(trim(regexp_replace(p_full_name, '\s+', ' ', 'g')), '\s+'), 1) < 2
+  then
+    raise exception 'Please enter your first name and last name before continuing';
+  end if;
+
+  if p_full_name is not null and nullif(trim(coalesce(p_contact_number, '')), '') is null then
+    raise exception 'Please enter your contact number before continuing';
+  end if;
+
   update public.profiles
   set
-    full_name = coalesce(p_full_name, full_name),
+    full_name = coalesce(nullif(trim(regexp_replace(p_full_name, '\s+', ' ', 'g')), ''), full_name),
+    name_completed = (
+      array_length(
+        regexp_split_to_array(
+          trim(regexp_replace(coalesce(nullif(p_full_name, ''), full_name), '\s+', ' ', 'g')),
+          '\s+'
+        ),
+        1
+      ) >= 2
+      and nullif(trim(coalesce(p_contact_number, contact_number, '')), '') is not null
+    ),
     avatar_url = coalesce(p_avatar_url, avatar_url),
     contact_number = coalesce(p_contact_number, contact_number)
   where id = auth.uid()
@@ -2274,11 +2305,11 @@ with (security_invoker = true)
 as
 select
   p.id as user_id,
-  p.full_name,
+  coalesce(nullif(trim(p.full_name), ''), nullif(trim(p.name), ''), 'No name provided.') as full_name,
   coalesce(sum(o.points), 0)::integer as points_balance
 from public.profiles p
 left join public.one_card_points o on o.user_id = p.id
-group by p.id, p.full_name;
+group by p.id, p.full_name, p.name;
 
 comment on view public.one_card_point_balances is 'Frontend view for current NELPAC One Card balance per user.';
 
@@ -2318,7 +2349,7 @@ select
   e.title as event_title,
   e.event_date,
   ev.user_id,
-  p.full_name as user_full_name,
+  coalesce(nullif(trim(p.full_name), ''), nullif(trim(p.name), ''), 'No name provided.') as user_full_name,
   ev.accommodation,
   ev.time_management,
   ev.objectives_of_the_event,
@@ -2387,4 +2418,3 @@ comment on view public.event_evaluation_rating_distribution is 'Rating distribut
 -- 1. Sign up normally through Supabase Auth or your frontend.
 -- 2. In SQL Editor, run this once with your real admin email:
 --    update public.profiles set role = 'admin' where email = 'lagmayjerome1@gmail.com';
-

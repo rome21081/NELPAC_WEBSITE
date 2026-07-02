@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, Link } from "react-router";
 import { Upload, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { getActiveLocalChurchesByDistrict } from "../../lib/localChurches";
+import { buildFullName } from "../../lib/profileNames";
 import { supabase } from "../../lib/supabaseClient";
 import nelpacLogo from "../../../../NELPAC-LOGO.jpg";
 import {
@@ -32,7 +33,9 @@ function RegisterPage() {
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
-    name: "",
+    firstName: "",
+    middleName: "",
+    lastName: "",
     birthday: "",
     gender: "",
     contactNumber: "",
@@ -90,7 +93,8 @@ function RegisterPage() {
 
   const submitRegistration = async () => {
     const requiredFields = [
-      ["name", "Name"],
+      ["firstName", "First name"],
+      ["lastName", "Last name"],
       ["birthday", "Birthday"],
       ["gender", "Gender"],
       ["contactNumber", "Contact number"],
@@ -113,7 +117,8 @@ function RegisterPage() {
       setMessage(`${missing[1]} is required.`);
       setStep(
         [
-          "name",
+          "firstName",
+          "lastName",
           "birthday",
           "gender",
           "contactNumber",
@@ -122,9 +127,15 @@ function RegisterPage() {
           "emergencyContact",
         ].includes(missing[0])
           ? 0
-          : ["district", "localChurchId", "professingMember", "confirmationClassStatus", "activityStatus"].includes(missing[0])
-          ? 1
-          : 2,
+          : [
+                "district",
+                "localChurchId",
+                "professingMember",
+                "confirmationClassStatus",
+                "activityStatus",
+              ].includes(missing[0])
+            ? 1
+            : 2,
       );
       return;
     }
@@ -145,13 +156,19 @@ function RegisterPage() {
     setMessage("");
 
     try {
+      const fullName = buildFullName(
+        form.firstName,
+        form.middleName,
+        form.lastName,
+      );
       const { data, error } = await supabase.auth.signUp({
         email: form.email,
         password: form.password,
         options: {
           data: {
-            full_name: form.name,
-            name: form.name,
+            full_name: fullName,
+            name: fullName,
+            profile_name_completed: true,
             birthday: form.birthday,
             gender: form.gender,
             contact_number: form.contactNumber,
@@ -182,7 +199,7 @@ function RegisterPage() {
       }
 
       await updateMyProfile({
-        full_name: form.name,
+        full_name: fullName,
         contact_number: form.contactNumber,
         avatar_url: avatarUrl,
       });
@@ -197,7 +214,8 @@ function RegisterPage() {
   const validateStep = () => {
     const stepFields = [
       [
-        ["name", "Name"],
+        ["firstName", "First name"],
+        ["lastName", "Last name"],
         ["birthday", "Birthday"],
         ["gender", "Gender"],
         ["contactNumber", "Contact number"],
@@ -252,10 +270,12 @@ function RegisterPage() {
     >
       <div className="w-full max-w-lg">
         <div className="flex items-center justify-center gap-3 mb-6">
-          <div
-            className="w-11 h-11 rounded-2xl flex items-center justify-center overflow-hidden bg-white"
-          >
-            <img src={nelpacLogo} alt="NELPAC logo" className="h-full w-full object-contain" />
+          <div className="w-11 h-11 rounded-2xl flex items-center justify-center overflow-hidden bg-white">
+            <img
+              src={nelpacLogo}
+              alt="NELPAC logo"
+              className="h-full w-full object-contain"
+            />
           </div>
           <div>
             <p
@@ -289,8 +309,8 @@ function RegisterPage() {
                       i < step
                         ? "bg-emerald-500 text-white"
                         : i === step
-                        ? "text-white"
-                        : "bg-slate-100 text-slate-400"
+                          ? "text-white"
+                          : "bg-slate-100 text-slate-400"
                     }`}
                     style={
                       i === step
@@ -313,8 +333,8 @@ function RegisterPage() {
                       i === step
                         ? "text-blue-600"
                         : i < step
-                        ? "text-emerald-500"
-                        : "text-slate-400"
+                          ? "text-emerald-500"
+                          : "text-slate-400"
                     }`}
                     style={{ fontSize: "10px", fontWeight: 600 }}
                   >
@@ -364,20 +384,61 @@ function RegisterPage() {
                   {form.profilePhoto?.name || "Upload Profile Photo"}
                 </p>
               </div>
-              <div>
-                <label
-                  className={labelClass}
-                  style={{ fontSize: "13px", fontWeight: 600 }}
-                >
-                  Name *
-                </label>
-                <input
-                  required
-                  className={inputClass}
-                  placeholder="Juan Dela Cruz"
-                  value={form.name}
-                  onChange={(e) => update("name", e.target.value)}
-                />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label
+                    className={labelClass}
+                    style={{ fontSize: "13px", fontWeight: 600 }}
+                  >
+                    First Name *
+                  </label>
+                  <input
+                    required
+                    autoComplete="given-name"
+                    className={inputClass}
+                    placeholder="Juan"
+                    value={form.firstName}
+                    onChange={(event) =>
+                      update("firstName", event.target.value)
+                    }
+                  />
+                </div>
+                <div>
+                  <label
+                    className={labelClass}
+                    style={{ fontSize: "13px", fontWeight: 600 }}
+                  >
+                    Middle Name{" "}
+                    <span className="font-normal text-slate-400">
+                      (optional)
+                    </span>
+                  </label>
+                  <input
+                    autoComplete="additional-name"
+                    className={inputClass}
+                    placeholder="Santos"
+                    value={form.middleName}
+                    onChange={(event) =>
+                      update("middleName", event.target.value)
+                    }
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label
+                    className={labelClass}
+                    style={{ fontSize: "13px", fontWeight: 600 }}
+                  >
+                    Last Name *
+                  </label>
+                  <input
+                    required
+                    autoComplete="family-name"
+                    className={inputClass}
+                    placeholder="Dela Cruz"
+                    value={form.lastName}
+                    onChange={(event) => update("lastName", event.target.value)}
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -416,7 +477,12 @@ function RegisterPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={labelClass} style={{ fontSize: "13px", fontWeight: 600 }}>Gender *</label>
+                  <label
+                    className={labelClass}
+                    style={{ fontSize: "13px", fontWeight: 600 }}
+                  >
+                    Gender *
+                  </label>
                   <select
                     className={inputClass}
                     value={form.gender}
@@ -429,7 +495,12 @@ function RegisterPage() {
                   </select>
                 </div>
                 <div>
-                  <label className={labelClass} style={{ fontSize: "13px", fontWeight: 600 }}>Contact number *</label>
+                  <label
+                    className={labelClass}
+                    style={{ fontSize: "13px", fontWeight: 600 }}
+                  >
+                    Contact number *
+                  </label>
                   <input
                     className={inputClass}
                     placeholder="Contact number"
@@ -439,7 +510,12 @@ function RegisterPage() {
                 </div>
               </div>
               <div>
-                <label className={labelClass} style={{ fontSize: "13px", fontWeight: 600 }}>Address *</label>
+                <label
+                  className={labelClass}
+                  style={{ fontSize: "13px", fontWeight: 600 }}
+                >
+                  Address *
+                </label>
                 <input
                   className={inputClass}
                   placeholder="Purok/Street, Barangay, City/Municipality"
@@ -448,7 +524,12 @@ function RegisterPage() {
                 />
               </div>
               <div>
-                <label className={labelClass} style={{ fontSize: "13px", fontWeight: 600 }}>Parent/guardian name *</label>
+                <label
+                  className={labelClass}
+                  style={{ fontSize: "13px", fontWeight: 600 }}
+                >
+                  Parent/guardian name *
+                </label>
                 <input
                   className={inputClass}
                   placeholder="Parent or guardian name"
@@ -457,7 +538,12 @@ function RegisterPage() {
                 />
               </div>
               <div>
-                <label className={labelClass} style={{ fontSize: "13px", fontWeight: 600 }}>Emergency contact *</label>
+                <label
+                  className={labelClass}
+                  style={{ fontSize: "13px", fontWeight: 600 }}
+                >
+                  Emergency contact *
+                </label>
                 <input
                   className={inputClass}
                   placeholder="Emergency contact"
