@@ -12,6 +12,7 @@ import {
   ErrorState,
   LoadingState,
 } from "../../components/DataState";
+import { CustomFormSectionsEditor } from "../../components/CustomFormSections";
 import { useAuth } from "../../lib/authContext";
 import {
   listMerchForms,
@@ -77,10 +78,21 @@ function MerchPreordersManagement() {
   const save = async (event) => {
     event.preventDefault();
     setMessage("");
-    if (!form.gcash_recipient_name.trim() || !form.gcash_number.trim()) {
+    if (
+      form.status === "Published" &&
+      (!form.gcash_recipient_name.trim() || !form.gcash_number.trim())
+    ) {
       setMessage(
         "Unable to save: enter both the GCash recipient name and GCash number.",
       );
+      return;
+    }
+    if (
+      (form.form_config?.custom_sections || []).some((section) =>
+        (section.fields || []).some((field) => !field.label?.trim()),
+      )
+    ) {
+      setMessage("Unable to save: every custom input field needs a label.");
       return;
     }
     if (
@@ -161,7 +173,7 @@ function MerchPreordersManagement() {
           {message}
         </p>
       )}
-      <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4">
+      <div className="hidden">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-extrabold text-violet-950">
@@ -256,18 +268,8 @@ function MerchPreordersManagement() {
           ))}
         </div>
       </div>
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <p className="text-sm font-extrabold text-slate-900">
-          Merch price applies to every template type
-        </p>
-        <p className="mt-1 text-xs leading-5 text-slate-500">
-          Choose Shirt, Lace, or Others below, then enter its price in{" "}
-          <strong>Price per Item</strong>. Shirt displays color and XS–XXL
-          fields; Lace displays total quantity; Others displays the custom merch
-          name and total quantity.
-        </p>
-      </div>
-      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+
+      <div className="hidden">
         <p className="text-sm font-extrabold text-emerald-950">
           GCash Account Details
         </p>
@@ -305,7 +307,7 @@ function MerchPreordersManagement() {
         </div>
       </div>
       {form.merch_type === "Shirt" && (
-        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+        <div className="hidden">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-extrabold text-blue-950">
@@ -383,6 +385,7 @@ function MerchPreordersManagement() {
         </div>
       )}
       <form
+        id="merch-form-editor"
         onSubmit={save}
         className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"
       >
@@ -542,6 +545,128 @@ function MerchPreordersManagement() {
             )}
           </label>
         </div>
+
+        <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+          <p className="text-sm font-extrabold text-emerald-950">
+            GCash Account Details
+          </p>
+          <p className="mt-1 text-xs text-emerald-700">
+            These receiving-account details belong only to this merch form.
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label className="text-xs font-bold text-emerald-900">
+              Name of the Recipient
+              <input
+                required={form.status === "Published"}
+                className={inputClass}
+                value={form.gcash_recipient_name}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    gcash_recipient_name: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            <label className="text-xs font-bold text-emerald-900">
+              GCash Number
+              <input
+                required={form.status === "Published"}
+                inputMode="numeric"
+                className={inputClass}
+                value={form.gcash_number}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    gcash_number: event.target.value,
+                  }))
+                }
+              />
+            </label>
+          </div>
+        </div>
+
+        {form.merch_type === "Shirt" && (
+          <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-extrabold text-blue-950">
+                  Available Shirt Colors
+                </p>
+                <p className="text-xs text-blue-700">
+                  These colors belong only to this shirt form.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setForm((current) => ({
+                    ...current,
+                    form_config: {
+                      ...current.form_config,
+                      shirt_colors: [
+                        ...(current.form_config?.shirt_colors || []),
+                        "",
+                      ],
+                    },
+                  }))
+                }
+                className="inline-flex items-center gap-1 rounded-lg bg-white px-3 py-2 text-xs font-bold text-blue-700"
+              >
+                <Plus size={13} /> Add color
+              </button>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {(form.form_config?.shirt_colors || []).map((color, index) => (
+                <div key={index} className="flex gap-2">
+                  <input
+                    required
+                    placeholder={`Color ${index + 1}, e.g. Navy Blue`}
+                    className={inputClass}
+                    value={color}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        form_config: {
+                          ...current.form_config,
+                          shirt_colors:
+                            current.form_config.shirt_colors.map((item, row) =>
+                              row === index ? event.target.value : item,
+                            ),
+                        },
+                      }))
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm((current) => ({
+                        ...current,
+                        form_config: {
+                          ...current.form_config,
+                          shirt_colors:
+                            current.form_config.shirt_colors.filter(
+                              (_, row) => row !== index,
+                            ),
+                        },
+                      }))
+                    }
+                    className="mt-1.5 rounded-xl border border-red-200 bg-white p-2.5 text-red-600"
+                    title="Remove color"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            {(form.form_config?.shirt_colors || []).length === 0 && (
+              <p className="mt-3 rounded-xl bg-white p-3 text-xs text-blue-700">
+                Add at least one color before saving this Shirt form.
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
           {message.toLowerCase().includes("unable") && (
             <p className="mr-auto rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
@@ -567,6 +692,32 @@ function MerchPreordersManagement() {
           </button>
         </div>
       </form>
+      <CustomFormSectionsEditor
+        sections={form.form_config?.custom_sections || []}
+        tone="violet"
+        onChange={(sections) =>
+          setForm((current) => ({
+            ...current,
+            form_config: {
+              ...current.form_config,
+              custom_sections: sections,
+            },
+          }))
+        }
+      />
+      <button
+        type="submit"
+        form="merch-form-editor"
+        disabled={saving}
+        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-5 py-4 text-sm font-extrabold text-white shadow-lg disabled:opacity-60"
+      >
+        <Plus size={16} />
+        {saving
+          ? "Saving..."
+          : form.id
+            ? "Update Form and Additional Sections"
+            : "Create Form and Additional Sections"}
+      </button>
       {forms.length === 0 ? (
         <EmptyState label="No merch forms yet." />
       ) : (

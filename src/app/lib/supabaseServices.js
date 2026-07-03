@@ -194,9 +194,19 @@ async function listMyChurchMembers() {
 async function getMyEventRegistration(eventId) {
   const { data, error } = await requireSupabase()
     .from("event_registrations")
-    .select("*, event_registration_delegates(*)")
+    .select("*, event_registration_delegates(*), event_registration_supplements(*)")
     .eq("event_id", eventId)
     .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function appendEventRegistrationSupplement(payload) {
+  const { data, error } = await requireSupabase()
+    .from("event_registration_supplements")
+    .insert(payload)
+    .select("*")
+    .single();
   if (error) throw error;
   return data;
 }
@@ -269,7 +279,7 @@ async function listEventRegistrations() {
     requireSupabase()
       .from("event_registrations")
       .select(
-        "*, events(title, description, event_date, venue, image_url), local_churches(name, district), profiles(full_name, name, email), event_registration_delegates(*)",
+        "*, events(title, description, event_date, venue, image_url, registration_form_config), local_churches(name, district), profiles(full_name, name, email), event_registration_delegates(*), event_registration_supplements(*)",
       )
       .order("created_at", { ascending: false }),
   );
@@ -287,11 +297,17 @@ async function listEventRegistrationAnalytics() {
 async function updateEventRegistrationPayment(
   id,
   paymentStatus,
+  paymentShortfall = 0,
   adminNotes = null,
 ) {
   const { data, error } = await requireSupabase()
     .from("event_registrations")
-    .update({ payment_status: paymentStatus, admin_notes: adminNotes })
+    .update({
+      payment_status: paymentStatus,
+      payment_shortfall:
+        paymentStatus === "Partial" ? Number(paymentShortfall) : 0,
+      admin_notes: adminNotes,
+    })
     .eq("id", id)
     .select("*")
     .single();
@@ -343,9 +359,19 @@ async function saveMerchForm(form) {
 async function getMyMerchPreorder(formId) {
   const { data, error } = await requireSupabase()
     .from("merch_preorders")
-    .select("*, merch_shirt_order_items(*)")
+    .select("*, merch_shirt_order_items(*), merch_preorder_supplements(*)")
     .eq("form_id", formId)
     .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function appendMerchPreorderSupplement(payload) {
+  const { data, error } = await requireSupabase()
+    .from("merch_preorder_supplements")
+    .insert(payload)
+    .select("*")
+    .single();
   if (error) throw error;
   return data;
 }
@@ -416,7 +442,7 @@ async function listMerchPreorders() {
     requireSupabase()
       .from("merch_preorders")
       .select(
-        "*, merch_preorder_forms(title, description, preorder_date, image_url, merch_type, custom_merch_name), local_churches(name, district), profiles(full_name, name, email), merch_shirt_order_items(*)",
+        "*, merch_preorder_forms(title, description, preorder_date, image_url, merch_type, custom_merch_name, form_config), local_churches(name, district), profiles(full_name, name, email), merch_shirt_order_items(*), merch_preorder_supplements(*)",
       )
       .order("created_at", { ascending: false }),
   );
@@ -443,11 +469,42 @@ async function listShirtVariantAnalytics() {
 async function updateMerchPreorderPayment(
   id,
   paymentStatus,
+  paymentShortfall = 0,
   adminNotes = null,
 ) {
   const { data, error } = await requireSupabase()
     .from("merch_preorders")
-    .update({ payment_status: paymentStatus, admin_notes: adminNotes })
+    .update({
+      payment_status: paymentStatus,
+      payment_shortfall:
+        paymentStatus === "Partial" ? Number(paymentShortfall) : 0,
+      admin_notes: adminNotes,
+    })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function updateSupplementPayment(
+  table,
+  id,
+  paymentStatus,
+  paymentShortfall = 0,
+) {
+  const allowedTables = [
+    "event_registration_supplements",
+    "merch_preorder_supplements",
+  ];
+  if (!allowedTables.includes(table)) throw new Error("Invalid supplement type.");
+  const { data, error } = await requireSupabase()
+    .from(table)
+    .update({
+      payment_status: paymentStatus,
+      payment_shortfall:
+        paymentStatus === "Partial" ? Number(paymentShortfall) : 0,
+    })
     .eq("id", id)
     .select("*")
     .single();
@@ -890,6 +947,8 @@ async function setUserRole(userId, role) {
 }
 
 export {
+  appendEventRegistrationSupplement,
+  appendMerchPreorderSupplement,
   createMember,
   createPointsEntry,
   compressImageFile,
@@ -951,4 +1010,5 @@ export {
   updateEventRegistrationPayment,
   updateEventPreRegistration,
   updateMerchPreorderPayment,
+  updateSupplementPayment,
 };

@@ -210,14 +210,17 @@ create table if not exists public.event_registrations (
     (male_delegate_count + female_delegate_count) * fee_per_delegate
   ) stored,
   gcash_mode_of_payment text,
+  payment_sender_name text,
   proof_of_payment_url text,
   payment_date date,
   reference_number text,
   amount_paid numeric(12,2) not null default 0 check (amount_paid >= 0),
+  payment_shortfall numeric(12,2) not null default 0 check (payment_shortfall >= 0),
   payment_status public.form_payment_status not null default 'Pending',
   submission_status public.form_submission_status not null default 'Draft',
   submitted_at timestamptz,
   admin_notes text,
+  custom_field_responses jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint event_registrations_event_church_unique unique (event_id, local_church_id),
@@ -226,6 +229,11 @@ create table if not exists public.event_registrations (
     or submission_status <> 'Submitted'
   )
 );
+
+alter table public.event_registrations
+  add column if not exists payment_sender_name text,
+  add column if not exists custom_field_responses jsonb not null default '{}'::jsonb,
+  add column if not exists payment_shortfall numeric(12,2) not null default 0 check (payment_shortfall >= 0);
 
 create table if not exists public.event_registration_delegates (
   id uuid primary key default gen_random_uuid(),
@@ -477,14 +485,17 @@ create table if not exists public.merch_preorders (
   fee_per_item numeric(12,2) not null check (fee_per_item >= 0),
   expected_total numeric(12,2) generated always as (total_quantity * fee_per_item) stored,
   gcash_mode_of_payment text,
+  payment_sender_name text,
   proof_of_payment_url text,
   payment_date date,
   reference_number text,
   amount_paid numeric(12,2) not null default 0 check (amount_paid >= 0),
+  payment_shortfall numeric(12,2) not null default 0 check (payment_shortfall >= 0),
   payment_status public.form_payment_status not null default 'Pending',
   submission_status public.form_submission_status not null default 'Draft',
   submitted_at timestamptz,
   admin_notes text,
+  custom_field_responses jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint merch_preorders_form_church_unique unique(form_id, local_church_id),
@@ -493,6 +504,11 @@ create table if not exists public.merch_preorders (
     or submission_status <> 'Submitted'
   )
 );
+
+alter table public.merch_preorders
+  add column if not exists payment_sender_name text,
+  add column if not exists custom_field_responses jsonb not null default '{}'::jsonb,
+  add column if not exists payment_shortfall numeric(12,2) not null default 0 check (payment_shortfall >= 0);
 
 create table if not exists public.merch_shirt_order_items (
   id uuid primary key default gen_random_uuid(),
@@ -668,6 +684,62 @@ drop trigger if exists sync_shirt_preorder_total_trigger on public.merch_shirt_o
 create trigger sync_shirt_preorder_total_trigger
 after insert or update or delete on public.merch_shirt_order_items
 for each row execute function public.sync_shirt_preorder_total();
+
+-- Payment proof does not prove the amount. User submissions always enter the
+-- admin review queue as Pending. Only admins can verify full/partial payment.
+create or replace function public.enforce_payment_review_status()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  expected_amount numeric;
+  row_data jsonb;
+begin
+  row_data := to_jsonb(new);
+
+  if tg_table_name = 'event_registrations' then
+    expected_amount := (
+      coalesce((row_data ->> 'male_delegate_count')::numeric, 0)
+      + coalesce((row_data ->> 'female_delegate_count')::numeric, 0)
+    ) * coalesce((row_data ->> 'fee_per_delegate')::numeric, 0);
+  else
+    expected_amount :=
+      coalesce((row_data ->> 'total_quantity')::numeric, 0)
+      * coalesce((row_data ->> 'fee_per_item')::numeric, 0);
+  end if;
+
+  if not public.is_admin() then
+    new.payment_status := 'Pending';
+    new.payment_shortfall := 0;
+    new.amount_paid := 0;
+  elsif new.payment_status = 'Partial' then
+    if new.payment_shortfall <= 0 or new.payment_shortfall >= expected_amount then
+      raise exception 'Verified Partial requires a shortfall greater than zero and below the expected total';
+    end if;
+    new.amount_paid := expected_amount - new.payment_shortfall;
+  elsif new.payment_status = 'Verified' then
+    new.payment_shortfall := 0;
+    new.amount_paid := expected_amount;
+  else
+    new.payment_shortfall := 0;
+    new.amount_paid := 0;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists zz_enforce_event_payment_review on public.event_registrations;
+create trigger zz_enforce_event_payment_review
+before insert or update on public.event_registrations
+for each row execute function public.enforce_payment_review_status();
+
+drop trigger if exists zz_enforce_merch_payment_review on public.merch_preorders;
+create trigger zz_enforce_merch_payment_review
+before insert or update on public.merch_preorders
+for each row execute function public.enforce_payment_review_status();
 
 -- ============================================================
 -- Row-level security
@@ -883,14 +955,17 @@ select
   coalesce(sum(registration.male_delegate_count) filter (where registration.submission_status = 'Submitted'), 0) as male_delegates,
   coalesce(sum(registration.female_delegate_count) filter (where registration.submission_status = 'Submitted'), 0) as female_delegates,
   coalesce(sum(registration.expected_total) filter (where registration.submission_status = 'Submitted'), 0)::numeric(14,2) as total_expected_payment,
-  coalesce(sum(registration.amount_paid) filter (where registration.submission_status = 'Submitted'), 0)::numeric(14,2) as total_submitted_payment,
+  coalesce(sum(registration.expected_total) filter (
+    where registration.submission_status = 'Submitted'
+      and registration.payment_status = 'Verified'
+  ), 0)::numeric(14,2) as total_submitted_payment,
   count(registration.id) filter (
     where registration.submission_status = 'Submitted'
-      and registration.payment_status in ('Paid', 'Verified')
+      and registration.payment_status = 'Verified'
   ) as paid_registrations,
   count(registration.id) filter (
     where registration.submission_status = 'Submitted'
-      and registration.payment_status not in ('Paid', 'Verified')
+      and registration.payment_status <> 'Verified'
   ) as unpaid_or_partial_registrations
 from public.events event
 left join public.event_registrations registration on registration.event_id = event.id
@@ -907,14 +982,17 @@ select
   count(preorder.id) filter (where preorder.submission_status = 'Submitted') as churches_with_orders,
   coalesce(sum(preorder.total_quantity) filter (where preorder.submission_status = 'Submitted'), 0) as total_items_ordered,
   coalesce(sum(preorder.expected_total) filter (where preorder.submission_status = 'Submitted'), 0)::numeric(14,2) as total_expected_payment,
-  coalesce(sum(preorder.amount_paid) filter (where preorder.submission_status = 'Submitted'), 0)::numeric(14,2) as total_submitted_payment,
+  coalesce(sum(preorder.expected_total) filter (
+    where preorder.submission_status = 'Submitted'
+      and preorder.payment_status = 'Verified'
+  ), 0)::numeric(14,2) as total_submitted_payment,
   count(preorder.id) filter (
     where preorder.submission_status = 'Submitted'
-      and preorder.payment_status in ('Paid', 'Verified')
+      and preorder.payment_status = 'Verified'
   ) as paid_preorders,
   count(preorder.id) filter (
     where preorder.submission_status = 'Submitted'
-      and preorder.payment_status not in ('Paid', 'Verified')
+      and preorder.payment_status <> 'Verified'
   ) as unpaid_or_partial_preorders
 from public.merch_preorder_forms form
 left join public.merch_preorders preorder on preorder.form_id = form.id

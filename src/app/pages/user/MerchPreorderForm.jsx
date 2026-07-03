@@ -10,10 +10,12 @@ import {
 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ErrorState, LoadingState } from "../../components/DataState";
+import { CustomFormSections } from "../../components/CustomFormSections";
 import { ImageLightbox } from "../../components/ImageLightbox";
 import { useAuth } from "../../lib/authContext";
 import { hasCompleteProfileName } from "../../lib/profileNames";
 import {
+  appendMerchPreorderSupplement,
   getMerchForm,
   getMyMembers,
   getMyMerchPreorder,
@@ -51,6 +53,7 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [addingAnother, setAddingAnother] = useState(false);
   const proofInputRef = useRef(null);
   const [proofSelection, setProofSelection] = useState(null);
   const [imageViewer, setImageViewer] = useState(null);
@@ -62,8 +65,10 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
     president_contact_number: "",
     total_quantity: 0,
     gcash_mode_of_payment: "GCash",
+    payment_sender_name: "",
     payment_date: "",
     reference_number: "",
+    custom_field_responses: {},
   });
 
   useEffect(() => {
@@ -95,8 +100,10 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
             president_contact_number: order.president_contact_number,
             total_quantity: order.total_quantity,
             gcash_mode_of_payment: order.gcash_mode_of_payment || "GCash",
+            payment_sender_name: order.payment_sender_name || "",
             payment_date: order.payment_date || "",
             reference_number: order.reference_number || "",
+            custom_field_responses: order.custom_field_responses || {},
           });
           if (
             merchData.merch_type === "Shirt" &&
@@ -225,7 +232,10 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
         "Select a shirt color from the administrator's available colors.",
       );
     const selectedProofFile = proofInputRef.current?.files?.[0] || null;
-    if (!selectedProofFile && !existing?.proof_of_payment_url)
+    if (
+      !selectedProofFile &&
+      (addingAnother || !existing?.proof_of_payment_url)
+    )
       return setError(
         "Attach a clear proof-of-payment image before submitting.",
       );
@@ -249,20 +259,46 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
               })),
             )
           : [];
-      await submitMerchPreorder({
-        preorder: {
-          ...(existing?.id ? { id: existing.id } : {}),
-          form_id: formId,
+      if (existing?.submission_status === "Submitted" && addingAnother) {
+        await appendMerchPreorderSupplement({
+          preorder_id: existing.id,
           submitted_by: user.id,
-          ...form,
+          submission_details: {
+            local_church_president: form.local_church_president,
+            president_contact_number: form.president_contact_number,
+            merch_type: merch.merch_type,
+            custom_merch_name: merch.custom_merch_name,
+          },
+          order_items:
+            merch.merch_type === "Shirt"
+              ? shirtItems.filter((item) => item.quantity > 0)
+              : [{ quantity: totalQuantity, merch_name: merchName }],
           total_quantity: totalQuantity,
+          fee_per_item: Number(merch.item_fee),
+          gcash_mode_of_payment: form.gcash_mode_of_payment,
+          payment_sender_name: form.payment_sender_name,
           payment_date: form.payment_date || null,
           reference_number: form.reference_number || null,
           proof_of_payment_url: proofPath,
-          amount_paid: proofPath ? totalPayment : 0,
-        },
-        shirtItems,
-      });
+          custom_field_responses: form.custom_field_responses || {},
+        });
+      } else {
+        await submitMerchPreorder({
+          preorder: {
+            ...(existing?.id ? { id: existing.id } : {}),
+            form_id: formId,
+            submitted_by: user.id,
+            ...form,
+            total_quantity: totalQuantity,
+            payment_date: form.payment_date || null,
+            reference_number: form.reference_number || null,
+            proof_of_payment_url: proofPath,
+            amount_paid: 0,
+          },
+          shirtItems,
+        });
+      }
+      setAddingAnother(false);
       setSuccess(true);
     } catch (err) {
       setError(err.message || "Unable to submit pre-order.");
@@ -274,7 +310,7 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
   if (loading) return <LoadingState label="Loading merch form..." />;
   if (!merch)
     return <ErrorState message={error || "Pre-order form not found."} />;
-  if (success || existing?.submission_status === "Submitted")
+  if ((success || existing?.submission_status === "Submitted") && !addingAnother)
     return (
       <div className="mx-auto max-w-2xl rounded-3xl border border-emerald-200 bg-white p-8 text-center">
         <CheckCircle2 className="mx-auto text-emerald-500" size={52} />
@@ -282,6 +318,27 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
         <p className="mt-2 text-slate-500">
           Your {merchName} order has been sent to the NELPAC admin.
         </p>
+        <button
+          type="button"
+          onClick={() => {
+            setSuccess(false);
+            setAddingAnother(true);
+            setColors([newColor()]);
+            setProofSelection(null);
+            if (proofInputRef.current) proofInputRef.current.value = "";
+            setForm((current) => ({
+              ...current,
+              total_quantity: 0,
+              payment_sender_name: "",
+              payment_date: "",
+              reference_number: "",
+              custom_field_responses: {},
+            }));
+          }}
+          className="mt-6 inline-flex rounded-xl bg-emerald-700 px-5 py-3 text-sm font-bold text-white"
+        >
+          Add Another Submission
+        </button>
         {onBack ? (
           <button
             onClick={onBack}
@@ -408,23 +465,6 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
             </button>
           </section>
         )}
-        {(merch.form_config?.custom_sections || [])
-          .filter((section) => section.title || section.description)
-          .map((section, index) => (
-            <section
-              key={index}
-              className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-7"
-            >
-              <h2 className="font-extrabold text-slate-900">
-                {section.title || `Additional information ${index + 1}`}
-              </h2>
-              {section.description && (
-                <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-600">
-                  {section.description}
-                </p>
-              )}
-            </section>
-          ))}
         <section className="rounded-3xl border border-violet-200 bg-white p-5 sm:p-7">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -640,6 +680,20 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
             </strong>
           </div>
         </section>
+        <CustomFormSections
+          sections={merch.form_config?.custom_sections || []}
+          values={form.custom_field_responses}
+          tone="violet"
+          onChange={(fieldId, value) =>
+            setForm((current) => ({
+              ...current,
+              custom_field_responses: {
+                ...current.custom_field_responses,
+                [fieldId]: value,
+              },
+            }))
+          }
+        />
         {(merch.gcash_recipient_name || merch.gcash_number) && (
           <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
             <p className="text-xs font-black uppercase tracking-wide text-emerald-700">
@@ -683,6 +737,22 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
                   setForm((f) => ({
                     ...f,
                     gcash_mode_of_payment: e.target.value,
+                  }))
+                }
+                className={inputClass}
+              />
+            </label>
+            <label className="text-sm font-semibold">
+              Payment Sender Name
+              <input
+                required
+                autoComplete="name"
+                placeholder="Name shown on the GCash account or receipt"
+                value={form.payment_sender_name}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    payment_sender_name: e.target.value,
                   }))
                 }
                 className={inputClass}

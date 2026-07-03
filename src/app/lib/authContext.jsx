@@ -2,6 +2,29 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
 
 const AuthContext = createContext(null);
+const realtimeTables = [
+  "profiles",
+  "local_churches",
+  "local_church_members",
+  "events",
+  "event_evaluations",
+  "image_submissions",
+  "one_card_points",
+  "one_card_redeem_codes",
+  "one_card_redeem_code_claims",
+  "posts_or_announcements",
+  "rewards",
+  "reward_claims",
+  "redeem_codes",
+  "notifications",
+  "event_registrations",
+  "event_registration_delegates",
+  "event_registration_supplements",
+  "merch_preorder_forms",
+  "merch_preorders",
+  "merch_shirt_order_items",
+  "merch_preorder_supplements",
+];
 
 async function fetchProfile(userId) {
   if (!userId) return null;
@@ -68,6 +91,49 @@ function AuthProvider({ children }) {
       listener.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!session?.user?.id) return undefined;
+
+    const handleChange = (payload) => {
+      window.dispatchEvent(
+        new CustomEvent("nelpac:data-changed", {
+          detail: {
+            table: payload.table,
+            eventType: payload.eventType,
+            newRow: payload.new,
+            oldRow: payload.old,
+          },
+        }),
+      );
+
+      if (
+        payload.table === "profiles" &&
+        (payload.new?.id === session.user.id ||
+          payload.old?.id === session.user.id)
+      ) {
+        fetchProfile(session.user.id).then(setProfile).catch(console.error);
+      }
+    };
+
+    const channel = supabase.channel(`nelpac-live-${session.user.id}`);
+    realtimeTables.forEach((table) => {
+      channel.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table },
+        handleChange,
+      );
+    });
+    channel.subscribe((status) => {
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        console.warn(`NELPAC Realtime channel status: ${status}`);
+      }
+    });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session?.user?.id]);
 
   const value = useMemo(
     () => ({

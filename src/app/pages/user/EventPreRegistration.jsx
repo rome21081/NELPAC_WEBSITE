@@ -13,9 +13,17 @@ import {
 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ErrorState, LoadingState } from "../../components/DataState";
+import { CustomFormSections } from "../../components/CustomFormSections";
 import { useAuth } from "../../lib/authContext";
+import {
+  clearFormDraft,
+  loadFormDraft,
+  saveFormDraftData,
+  saveFormDraftFile,
+} from "../../lib/formDraftStorage";
 import { hasCompleteProfileName } from "../../lib/profileNames";
 import {
+  appendEventRegistrationSupplement,
   getEvent,
   getMyMembers,
   getMyEventRegistration,
@@ -59,7 +67,10 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [addingAnother, setAddingAnother] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
   const proofInputRef = useRef(null);
+  const [proofFile, setProofFile] = useState(null);
   const [proofSelection, setProofSelection] = useState(null);
   const [district, setDistrict] = useState("");
   const [form, setForm] = useState({
@@ -71,11 +82,14 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
     male_delegate_count: 0,
     female_delegate_count: 0,
     gcash_mode_of_payment: "GCash",
+    payment_sender_name: "",
     payment_date: "",
     reference_number: "",
+    custom_field_responses: {},
   });
   const [delegates, setDelegates] = useState([]);
   const [expandedDelegate, setExpandedDelegate] = useState(null);
+  const draftKey = `nelpac:event-registration-draft:${user.id}:${eventId}`;
 
   useEffect(() => {
     Promise.all([
@@ -85,7 +99,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
       getMyEventRegistration(eventId),
       getMyMembers(user.id),
     ])
-      .then(([eventData, churchData, memberData, registration, ownMembers]) => {
+      .then(async ([eventData, churchData, memberData, registration, ownMembers]) => {
         setEvent(eventData);
         setChurches(churchData);
         setMembers(memberData);
@@ -114,8 +128,11 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
             female_delegate_count: registration.female_delegate_count,
             gcash_mode_of_payment:
               registration.gcash_mode_of_payment || "GCash",
+            payment_sender_name: registration.payment_sender_name || "",
             payment_date: registration.payment_date || "",
             reference_number: registration.reference_number || "",
+            custom_field_responses:
+              registration.custom_field_responses || {},
           });
           setDelegates(
             (registration.event_registration_delegates || []).sort(
@@ -128,12 +145,60 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
             local_church_id: registeredChurchId,
           }));
         }
+
+        const savedDraft = await loadFormDraft(draftKey);
+        if (savedDraft.data?.form) {
+          setForm((current) => ({ ...current, ...savedDraft.data.form }));
+          setDelegates(savedDraft.data.delegates || []);
+          setAddingAnother(Boolean(savedDraft.data.addingAnother));
+          setExpandedDelegate(savedDraft.data.expandedDelegate ?? null);
+          const draftChurch = churchData.find(
+            (item) => item.id === savedDraft.data.form.local_church_id,
+          );
+          if (draftChurch) setDistrict(draftChurch.district || "");
+        }
+        if (savedDraft.proofFile) {
+          setProofFile(savedDraft.proofFile);
+          setProofSelection({
+            name: savedDraft.proofFile.name,
+            size: savedDraft.proofFile.size,
+          });
+        }
       })
       .catch((err) =>
         setError(err.message || "Unable to load the registration form."),
       )
-      .finally(() => setLoading(false));
-  }, [eventId, user.id]);
+      .finally(() => {
+        setDraftReady(true);
+        setLoading(false);
+      });
+  }, [draftKey, eventId, user.id]);
+
+  useEffect(() => {
+    if (!draftReady || loading || success) return undefined;
+    if (existing?.submission_status === "Submitted" && !addingAnother)
+      return undefined;
+
+    const timeout = window.setTimeout(() => {
+      saveFormDraftData(draftKey, {
+        form,
+        delegates,
+        addingAnother,
+        expandedDelegate,
+      });
+    }, 350);
+    return () => window.clearTimeout(timeout);
+  }, [
+    addingAnother,
+    delegates,
+    draftKey,
+    draftReady,
+    existing?.submission_status,
+    expandedDelegate,
+    form,
+    loading,
+    success,
+  ]);
 
   const selectedChurch = churches.find(
     (item) => item.id === form.local_church_id,
@@ -197,7 +262,9 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
     setError("");
     if (!file) {
       if (proofInputRef.current) proofInputRef.current.value = "";
+      setProofFile(null);
       setProofSelection(null);
+      void saveFormDraftFile(draftKey, null);
       return;
     }
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
@@ -212,7 +279,9 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
       setError("Proof of payment must be 10 MB or smaller.");
       return;
     }
+    setProofFile(file);
     setProofSelection({ name: file.name, size: file.size });
+    void saveFormDraftFile(draftKey, file);
   };
 
   const submit = async (submitEvent) => {
@@ -236,8 +305,12 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
       delegates.some((delegate) => !delegate.name.trim() || delegate.age === "")
     )
       return setError("Complete every delegate row before submitting.");
-    const selectedProofFile = proofInputRef.current?.files?.[0] || null;
-    if (!selectedProofFile && !existing?.proof_of_payment_url)
+    const selectedProofFile =
+      proofFile || proofInputRef.current?.files?.[0] || null;
+    if (
+      !selectedProofFile &&
+      (addingAnother || !existing?.proof_of_payment_url)
+    )
       return setError(
         "Attach a clear proof-of-payment image before submitting.",
       );
@@ -251,21 +324,53 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
             eventId,
           )
         : existing?.proof_of_payment_url || null;
-      await submitEventRegistration({
-        registration: {
-          ...(existing?.id ? { id: existing.id } : {}),
-          event_id: eventId,
+      if (existing?.submission_status === "Submitted" && addingAnother) {
+        await appendEventRegistrationSupplement({
+          registration_id: existing.id,
           submitted_by: user.id,
-          ...form,
+          submission_details: {
+            local_church_worker: form.local_church_worker,
+            worker_contact_number: form.worker_contact_number,
+            local_church_president: form.local_church_president,
+            president_contact_number: form.president_contact_number,
+          },
+          delegates: delegates.map((delegate, index) => ({
+            row_number: index + 1,
+            selected_member_id: delegate.selected_member_id || null,
+            name: delegate.name.trim(),
+            age: Number(delegate.age),
+            gender: delegate.gender,
+            health_condition: delegate.health_condition?.trim() || null,
+          })),
           male_delegate_count: maleDelegateCount,
           female_delegate_count: femaleDelegateCount,
+          fee_per_delegate: Number(event.registration_fee),
+          gcash_mode_of_payment: form.gcash_mode_of_payment,
+          payment_sender_name: form.payment_sender_name,
           payment_date: form.payment_date || null,
           reference_number: form.reference_number || null,
           proof_of_payment_url: proofPath,
-          amount_paid: proofPath ? totalPayment : 0,
-        },
-        delegates,
-      });
+          custom_field_responses: form.custom_field_responses || {},
+        });
+      } else {
+        await submitEventRegistration({
+          registration: {
+            ...(existing?.id ? { id: existing.id } : {}),
+            event_id: eventId,
+            submitted_by: user.id,
+            ...form,
+            male_delegate_count: maleDelegateCount,
+            female_delegate_count: femaleDelegateCount,
+            payment_date: form.payment_date || null,
+            reference_number: form.reference_number || null,
+            proof_of_payment_url: proofPath,
+            amount_paid: 0,
+          },
+          delegates,
+        });
+      }
+      await clearFormDraft(draftKey);
+      setAddingAnother(false);
       setSuccess(true);
     } catch (err) {
       setError(err.message || "Unable to submit registration.");
@@ -276,7 +381,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
 
   if (loading) return <LoadingState label="Loading pre-registration form..." />;
   if (!event) return <ErrorState message={error || "Event not found."} />;
-  if (success || existing?.submission_status === "Submitted")
+  if ((success || existing?.submission_status === "Submitted") && !addingAnother)
     return (
       <div className="mx-auto max-w-2xl rounded-3xl border border-emerald-200 bg-white p-8 text-center shadow-sm">
         <CheckCircle2 className="mx-auto text-emerald-500" size={52} />
@@ -287,6 +392,31 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
           Your church registration for {event.title} is safely recorded. The
           NELPAC admin can now review its payment.
         </p>
+        <button
+          type="button"
+          onClick={() => {
+            setSuccess(false);
+            setAddingAnother(true);
+            setDelegates([]);
+            setExpandedDelegate(null);
+            setProofFile(null);
+            setProofSelection(null);
+            void saveFormDraftFile(draftKey, null);
+            if (proofInputRef.current) proofInputRef.current.value = "";
+            setForm((current) => ({
+              ...current,
+              male_delegate_count: 0,
+              female_delegate_count: 0,
+              payment_sender_name: "",
+              payment_date: "",
+              reference_number: "",
+              custom_field_responses: {},
+            }));
+          }}
+          className="mt-6 inline-flex rounded-xl bg-emerald-700 px-5 py-3 text-sm font-bold text-white"
+        >
+          Add Another Submission
+        </button>
         {onBack ? (
           <button
             onClick={onBack}
@@ -369,6 +499,10 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
         </div>
       ) : (
         <form onSubmit={submit} className="mt-5 space-y-5">
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+            Your progress is saved automatically on this device. You can leave
+            this page and return without re-entering your details.
+          </div>
           <section className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
             <p className="font-bold text-blue-950">Before you begin</p>
             <p className="mt-1 text-sm leading-6 text-blue-800">
@@ -383,23 +517,6 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
               </p>
             </div>
           </section>
-          {(event.registration_form_config?.custom_sections || [])
-            .filter((section) => section.title || section.description)
-            .map((section, index) => (
-              <section
-                key={index}
-                className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"
-              >
-                <h2 className="font-extrabold text-slate-900">
-                  {section.title || `Additional information ${index + 1}`}
-                </h2>
-                {section.description && (
-                  <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-600">
-                    {section.description}
-                  </p>
-                )}
-              </section>
-            ))}
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
             <div className="mb-5 flex items-center gap-3">
               <div className="rounded-xl bg-blue-100 p-2 text-blue-700">
@@ -708,6 +825,20 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
             </button>
           </section>
 
+          <CustomFormSections
+            sections={event.registration_form_config?.custom_sections || []}
+            values={form.custom_field_responses}
+            onChange={(fieldId, value) =>
+              setForm((current) => ({
+                ...current,
+                custom_field_responses: {
+                  ...current.custom_field_responses,
+                  [fieldId]: value,
+                },
+              }))
+            }
+          />
+
           {(event.registration_gcash_recipient_name ||
             event.registration_gcash_number) && (
             <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm sm:p-7">
@@ -755,6 +886,22 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
                     setForm((f) => ({
                       ...f,
                       gcash_mode_of_payment: e.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                />
+              </label>
+              <label className="text-sm font-semibold text-slate-700">
+                Payment Sender Name
+                <input
+                  required
+                  autoComplete="name"
+                  placeholder="Name shown on the GCash account or receipt"
+                  value={form.payment_sender_name}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      payment_sender_name: e.target.value,
                     }))
                   }
                   className={inputClass}
