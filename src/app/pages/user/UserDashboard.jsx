@@ -258,7 +258,7 @@ function UserDashboard() {
             </div>
 
             <Link
-              to="/user/events"
+              to="/user/events?section=posts"
               className="shrink-0 text-xs font-bold text-violet-700 hover:underline"
             >
               View all
@@ -269,7 +269,7 @@ function UserDashboard() {
             <EmptyState label="No posts yet." />
           ) : (
             <div className="space-y-3">
-              {dashboard.posts.slice(0, 3).map((post) => (
+              {dashboard.posts.slice(0, 1).map((post) => (
                 <div
                   key={post.id}
                   className="flex min-w-0 gap-3 rounded-2xl border border-slate-100 p-3 transition hover:border-violet-200 hover:bg-violet-50/40"
@@ -278,10 +278,10 @@ function UserDashboard() {
                     <img
                       src={post.image_url}
                       alt={post.title}
-                      className="h-12 w-14 shrink-0 rounded-xl bg-slate-100 object-cover"
+                      className="h-16 w-16 shrink-0 rounded-xl bg-slate-100 object-cover"
                     />
                   ) : (
-                    <div className="flex h-12 w-14 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-500">
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-500">
                       <FileText size={18} />
                     </div>
                   )}
@@ -299,7 +299,7 @@ function UserDashboard() {
                       className="mt-1 text-xs leading-5 text-slate-500"
                       style={{
                         display: "-webkit-box",
-                        WebkitLineClamp: 2,
+                        WebkitLineClamp: 1,
                         WebkitBoxOrient: "vertical",
                         overflow: "hidden",
                       }}
@@ -308,7 +308,7 @@ function UserDashboard() {
                     </p>
 
                     <Link
-                      to="/user/events"
+                      to={`/user/events?post=${post.id}`}
                       className="mt-2 inline-flex w-fit rounded-full bg-violet-50 px-3 py-1 text-[11px] font-bold text-violet-700 transition hover:bg-violet-100"
                     >
                       See whole post
