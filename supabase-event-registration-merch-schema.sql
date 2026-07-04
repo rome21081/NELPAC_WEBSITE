@@ -235,6 +235,20 @@ alter table public.event_registrations
   add column if not exists custom_field_responses jsonb not null default '{}'::jsonb,
   add column if not exists payment_shortfall numeric(12,2) not null default 0 check (payment_shortfall >= 0);
 
+do $$ begin
+  alter table public.event_registrations
+    add constraint event_worker_contact_ph_mobile_check
+    check (worker_contact_number ~ '^09[0-9]{9}$') not valid;
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  alter table public.event_registrations
+    add constraint event_president_contact_ph_mobile_check
+    check (president_contact_number ~ '^09[0-9]{9}$') not valid;
+exception when duplicate_object then null;
+end $$;
+
 create table if not exists public.event_registration_delegates (
   id uuid primary key default gen_random_uuid(),
   registration_id uuid not null references public.event_registrations(id) on delete cascade,
@@ -509,6 +523,13 @@ alter table public.merch_preorders
   add column if not exists payment_sender_name text,
   add column if not exists custom_field_responses jsonb not null default '{}'::jsonb,
   add column if not exists payment_shortfall numeric(12,2) not null default 0 check (payment_shortfall >= 0);
+
+do $$ begin
+  alter table public.merch_preorders
+    add constraint merch_president_contact_ph_mobile_check
+    check (president_contact_number ~ '^09[0-9]{9}$') not valid;
+exception when duplicate_object then null;
+end $$;
 
 create table if not exists public.merch_shirt_order_items (
   id uuid primary key default gen_random_uuid(),

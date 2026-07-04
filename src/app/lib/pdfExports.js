@@ -125,7 +125,12 @@ const sectionTitle = (doc, label, y) => {
   return nextY + 12;
 };
 
-const churchSectionTitle = (doc, churchName, y) => {
+const churchSectionTitle = (
+  doc,
+  churchName,
+  y,
+  sectionLabel = "Church and Delegates Information",
+) => {
   const nextY = ensureSpace(doc, y, 24);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(15, 23, 42);
@@ -134,11 +139,7 @@ const churchSectionTitle = (doc, churchName, y) => {
   doc.text(text(churchName, "Local Church").toUpperCase(), MARGIN, nextY + 5);
 
   doc.setFontSize(10.5);
-  doc.text(
-    "Section 1: Church and Delegates Information",
-    MARGIN,
-    nextY + 12,
-  );
+  doc.text(`Section 1: ${sectionLabel}`, MARGIN, nextY + 12);
 
   doc.setDrawColor(15, 23, 42);
   doc.setLineWidth(0.7);
@@ -204,6 +205,65 @@ const delegateSummaryTable = (doc, record, y) => {
       lineColor: [203, 213, 225],
       lineWidth: 0.2,
     },
+  });
+  return doc.lastAutoTable.finalY + 7;
+};
+
+const merchItemsTable = (doc, form, items, totalQuantity, y) => {
+  if (form.merch_type !== "Shirt") {
+    const merchName =
+      form.merch_type === "Others"
+        ? text(form.custom_merch_name, "Other Merch")
+        : "Lace";
+    return detailsTable(
+      doc,
+      [[
+        form.merch_type === "Others" ? "Name of Merch" : "Merch Type",
+        merchName,
+        "Total Number of Orders",
+        text(totalQuantity, "0"),
+      ]],
+      y,
+    );
+  }
+
+  const shirtSizes = ["XS", "S", "M", "L", "XL", "XXL"];
+  const grouped = new Map();
+  (items || []).forEach((item) => {
+    if (!grouped.has(item.color)) {
+      grouped.set(
+        item.color,
+        Object.fromEntries(shirtSizes.map((size) => [size, 0])),
+      );
+    }
+    grouped.get(item.color)[item.size] = Number(item.quantity || 0);
+  });
+  const rows = [...grouped.entries()].map(([color, quantities]) => {
+    const values = shirtSizes.map((size) => quantities[size] || 0);
+    return [color, ...values, values.reduce((sum, value) => sum + value, 0)];
+  });
+  autoTable(doc, {
+    startY: y,
+    head: [["Color", ...shirtSizes, "Total"]],
+    body: rows.length ? rows : [["No shirt items", 0, 0, 0, 0, 0, 0, 0]],
+    theme: "grid",
+    margin: { left: MARGIN, right: MARGIN, bottom: 20 },
+    headStyles: {
+      fillColor: [241, 245, 249],
+      textColor: [15, 23, 42],
+      fontStyle: "bold",
+      halign: "center",
+      fontSize: 8.5,
+    },
+    styles: {
+      font: "helvetica",
+      fontSize: 8.5,
+      cellPadding: 2.5,
+      lineColor: [203, 213, 225],
+      lineWidth: 0.2,
+      halign: "center",
+    },
+    columnStyles: { 0: { halign: "left", fontStyle: "bold", cellWidth: 42 } },
   });
   return doc.lastAutoTable.finalY + 7;
 };
@@ -506,7 +566,7 @@ async function downloadMerchPreorderPdf(preorder) {
     formatDate(form.preorder_date),
   ]);
 
-  y = sectionTitle(doc, "Section 1: Church Information", y);
+  y = churchSectionTitle(doc, church.name, y, "Church Information");
   y = detailsTable(
     doc,
     [
@@ -589,48 +649,46 @@ async function downloadMerchPreorderPdf(preorder) {
     y = detailsTable(doc, preorderResponseRows, y);
   }
 
-  y = sectionTitle(doc, "Section 3: Payment Details", y);
-  const merchName =
-    form.merch_type === "Others"
-      ? text(form.custom_merch_name, "Merch")
-      : text(form.merch_type, "Merch");
-  y = detailsTable(
-    doc,
-    [
-      [
-        `${merchName} Fee`,
-        `${amount(preorder.fee_per_item)} / item`,
-        "GCash Mode",
-        text(preorder.gcash_mode_of_payment),
-      ],
-      [
-        "Date of Payment",
-        formatDate(preorder.payment_date),
-        "Reference Number",
-        text(preorder.reference_number),
-      ],
-      [
-        "Payment Sender Name",
-        text(preorder.payment_sender_name),
-        "",
-        "",
-      ],
-      [
-        "Total Payment",
-        amount(preorder.expected_total),
-        "Payment Status",
-        paymentStatusLabel(preorder.payment_status),
-      ],
-      ...(preorder.payment_status === "Partial"
-        ? [["Amount Lacking", amount(preorder.payment_shortfall), "", ""]]
-        : []),
-    ],
-    y,
-  );
-
   const preorderSupplements = (
     preorder.merch_preorder_supplements || []
   ).sort((a, b) => new Date(a.submitted_at) - new Date(b.submitted_at));
+
+  for (const supplement of preorderSupplements) {
+    y = sectionTitle(doc, "Additional Order", y);
+    y = merchItemsTable(
+      doc,
+      form,
+      supplement.order_items || [],
+      supplement.total_quantity,
+      y,
+    );
+    const responseRows = customResponseRows(
+      form.form_config?.custom_sections,
+      supplement.custom_field_responses,
+    );
+    if (responseRows.length) {
+      y = sectionTitle(doc, "Additional Form Responses", y);
+      y = detailsTable(doc, responseRows, y);
+    }
+  }
+
+  const paymentRows = (record) => [
+    ["Payment Date", formatDate(record.payment_date), "Reference Number", text(record.reference_number)],
+    ["Payment Sender", text(record.payment_sender_name), "Submission Status", text(record.submission_status, "Submitted")],
+    ["Expected Amount", amount(record.expected_total), "Amount Paid", amount(record.amount_paid)],
+    ["Payment Status", paymentStatusLabel(record.payment_status), "GCash Mode", text(record.gcash_mode_of_payment)],
+    ...(record.payment_status === "Partial"
+      ? [["Amount Lacking", amount(record.payment_shortfall), "", ""]]
+      : []),
+  ];
+
+  y = sectionTitle(doc, "Section 3: Payment Details", y);
+  y = detailsTable(doc, paymentRows(preorder), y);
+  for (const supplement of preorderSupplements) {
+    y = sectionTitle(doc, "Additional Payment", y);
+    y = detailsTable(doc, paymentRows(supplement), y);
+  }
+
   const preorderExpected =
     Number(preorder.expected_total || 0) +
     preorderSupplements.reduce(
@@ -646,41 +704,9 @@ async function downloadMerchPreorderPdf(preorder) {
   y = sectionTitle(doc, "Combined Payment Summary", y);
   y = detailsTable(
     doc,
-    [["Total Expected", amount(preorderExpected), "Total Amount Paid", amount(preorderPaid)], ["Remaining Balance", amount(Math.max(preorderExpected - preorderPaid, 0)), "Combined Records", text(preorderSupplements.length + 1)]],
+    [["Total Expected", amount(preorderExpected), "Remaining Balance", amount(Math.max(preorderExpected - preorderPaid, 0))], ["Total Amount Paid", amount(preorderPaid), "Combined Records", text(preorderSupplements.length + 1)]],
     y,
   );
-  for (let index = 0; index < preorderSupplements.length; index += 1) {
-    const supplement = preorderSupplements[index];
-    const details = supplement.submission_details || {};
-    y = sectionTitle(doc, `Additional Submission ${index + 2}`, y);
-    y = detailsTable(
-      doc,
-      [
-        ["Church President", text(details.local_church_president), "President Contact", text(details.president_contact_number)],
-        ["Additional Items", text(supplement.total_quantity, "0"), "Expected Payment", amount(supplement.expected_total)],
-        ["Payment Sender", text(supplement.payment_sender_name), "Reference", text(supplement.reference_number)],
-        ["Payment Date", formatDate(supplement.payment_date), "Payment Status", paymentStatusLabel(supplement.payment_status)],
-        ["Amount Paid", amount(supplement.amount_paid), "Remaining", amount(Math.max(Number(supplement.expected_total) - Number(supplement.amount_paid), 0))],
-      ],
-      y,
-    );
-    const items = supplement.order_items || [];
-    if (items.length) {
-      autoTable(doc, {
-        startY: y,
-        head: [["Item / Color", "Size", "Quantity"]],
-        body: items.map((item) => [
-          text(item.color || item.merch_name),
-          text(item.size),
-          text(item.quantity, "0"),
-        ]),
-        theme: "grid",
-        margin: { left: MARGIN, right: MARGIN, bottom: 20 },
-        styles: { fontSize: 8.5, cellPadding: 2.5 },
-      });
-      y = doc.lastAutoTable.finalY + 7;
-    }
-  }
 
   addFooters(doc, preorder);
   doc.save(
@@ -729,7 +755,7 @@ async function downloadAllPreRegistrationsPdf(registrations, eventTitle) {
 
     const delegateRows = [...(registration.event_registration_delegates || [])]
       .sort((a, b) => Number(a.row_number) - Number(b.row_number));
-    y = sectionTitle(doc, "Delegate List", y);
+    y = sectionTitle(doc, "Section 2: Delegate List", y);
     autoTable(doc, {
       startY: y,
       head: [["No.", "Name", "Age", "Gender", "Health Condition"]],
@@ -749,6 +775,15 @@ async function downloadAllPreRegistrationsPdf(registrations, eventTitle) {
     });
     y = doc.lastAutoTable.finalY + 7;
 
+    const registrationResponseRows = customResponseRows(
+      event.registration_form_config?.custom_sections,
+      registration.custom_field_responses,
+    );
+    if (registrationResponseRows.length) {
+      y = sectionTitle(doc, "Additional Form Responses", y);
+      y = detailsTable(doc, registrationResponseRows, y);
+    }
+
     supplements.forEach((supplement) => {
       y = sectionTitle(doc, "Additional Delegate", y);
       y = delegateSummaryTable(doc, supplement, y);
@@ -764,10 +799,19 @@ async function downloadAllPreRegistrationsPdf(registrations, eventTitle) {
         styles: { fontSize: 8.5, cellPadding: 2.5 },
       });
       y = doc.lastAutoTable.finalY + 7;
+
+      const supplementResponseRows = customResponseRows(
+        event.registration_form_config?.custom_sections,
+        supplement.custom_field_responses,
+      );
+      if (supplementResponseRows.length) {
+        y = sectionTitle(doc, "Additional Form Responses", y);
+        y = detailsTable(doc, supplementResponseRows, y);
+      }
     });
 
     records.forEach((record, index) => {
-      y = sectionTitle(doc, index === 0 ? "Payment Details" : "Additional Payment", y);
+      y = sectionTitle(doc, index === 0 ? "Section 3: Payment Details" : "Additional Payment", y);
       y = detailsTable(doc, [
         ["Payment Date", formatDate(record.payment_date), "Reference Number", text(record.reference_number)],
         ["Payment Sender", text(record.payment_sender_name), "Submission Status", text(record.submission_status, "Submitted")],
@@ -791,16 +835,21 @@ async function downloadAllPreRegistrationsPdf(registrations, eventTitle) {
 async function downloadAllMerchPreordersPdf(preorders, formTitle) {
   const doc = createDocument();
   const form = preorders[0]?.merch_preorder_forms || {};
-  let y = await documentHeader(
-    doc,
-    form.title || formTitle,
-    form.description,
-    [formatDate(form.preorder_date)],
-  );
+  let y;
 
-  preorders.forEach((preorder, churchIndex) => {
+  for (let churchIndex = 0; churchIndex < preorders.length; churchIndex += 1) {
+    const preorder = preorders[churchIndex];
+    if (churchIndex > 0) doc.addPage();
+    y = await documentHeader(
+      doc,
+      form.title || formTitle,
+      form.description,
+      [formatDate(form.preorder_date)],
+    );
+
     const church = preorder.local_churches || {};
-    const supplements = preorder.merch_preorder_supplements || [];
+    const supplements = [...(preorder.merch_preorder_supplements || [])]
+      .sort((a, b) => new Date(a.submitted_at) - new Date(b.submitted_at));
     const records = [preorder, ...supplements];
     const expected = records.reduce(
       (sum, record) => sum + Number(record.expected_total || 0),
@@ -810,41 +859,74 @@ async function downloadAllMerchPreordersPdf(preorders, formTitle) {
       (sum, record) => sum + Number(record.amount_paid || 0),
       0,
     );
-    const quantity = records.reduce(
-      (sum, record) => sum + Number(record.total_quantity || 0),
-      0,
-    );
-    y = sectionTitle(
-      doc,
-      `${churchIndex + 1}. ${text(church.name, "Local Church")}`,
-      y,
-    );
+    y = churchSectionTitle(doc, church.name, y, "Church Information");
     y = detailsTable(
       doc,
       [
-        ["District", text(church.district), "Submission Records", text(records.length)],
-        ["Total Quantity", text(quantity), "Total Expected", amount(expected)],
-        ["Total Amount Paid", amount(paid), "Remaining Balance", amount(Math.max(expected - paid, 0))],
+        ["District", text(church.district), "Local Church", text(church.name)],
+        ["Church President", text(preorder.local_church_president), "President Contact", text(preorder.president_contact_number)],
       ],
       y,
     );
-    autoTable(doc, {
-      startY: y,
-      head: [["Payment", "Quantity", "Sender", "Reference", "Expected", "Status"]],
-      body: records.map((record, index) => [
-        `Submission ${index + 1}`,
-        text(record.total_quantity, "0"),
-        text(record.payment_sender_name),
-        text(record.reference_number),
-        amount(record.expected_total),
-        paymentStatusLabel(record.payment_status),
-      ]),
-      theme: "grid",
-      margin: { left: MARGIN, right: MARGIN, bottom: 20 },
-      styles: { fontSize: 8, cellPadding: 2.2 },
+
+    y = sectionTitle(doc, "Section 2: Order Details", y);
+    y = merchItemsTable(
+      doc,
+      form,
+      preorder.merch_shirt_order_items || [],
+      preorder.total_quantity,
+      y,
+    );
+
+    const preorderResponseRows = customResponseRows(
+      form.form_config?.custom_sections,
+      preorder.custom_field_responses,
+    );
+    if (preorderResponseRows.length) {
+      y = sectionTitle(doc, "Additional Form Responses", y);
+      y = detailsTable(doc, preorderResponseRows, y);
+    }
+
+    supplements.forEach((supplement) => {
+      y = sectionTitle(doc, "Additional Order", y);
+      y = merchItemsTable(
+        doc,
+        form,
+        supplement.order_items || [],
+        supplement.total_quantity,
+        y,
+      );
+      const responseRows = customResponseRows(
+        form.form_config?.custom_sections,
+        supplement.custom_field_responses,
+      );
+      if (responseRows.length) {
+        y = sectionTitle(doc, "Additional Form Responses", y);
+        y = detailsTable(doc, responseRows, y);
+      }
     });
-    y = doc.lastAutoTable.finalY + 9;
-  });
+
+    records.forEach((record, index) => {
+      y = sectionTitle(
+        doc,
+        index === 0 ? "Section 3: Payment Details" : "Additional Payment",
+        y,
+      );
+      y = detailsTable(doc, [
+        ["Payment Date", formatDate(record.payment_date), "Reference Number", text(record.reference_number)],
+        ["Payment Sender", text(record.payment_sender_name), "Submission Status", text(record.submission_status, "Submitted")],
+        ["Expected Amount", amount(record.expected_total), "Amount Paid", amount(record.amount_paid)],
+        ["Payment Status", paymentStatusLabel(record.payment_status), "GCash Mode", text(record.gcash_mode_of_payment)],
+        ...(record.payment_status === "Partial" ? [["Amount Lacking", amount(record.payment_shortfall), "", ""]] : []),
+      ], y);
+    });
+
+    y = sectionTitle(doc, "Combined Payment Summary", y);
+    y = detailsTable(doc, [
+      ["Total Expected", amount(expected), "Remaining Balance", amount(Math.max(expected - paid, 0))],
+      ["Total Amount Paid", amount(paid), "Combined Records", text(records.length)],
+    ], y);
+  }
 
   addFooters(doc, { id: `overall-merch-${Date.now()}` });
   doc.save(`Overall_Merch_PreOrders_${safeFilenamePart(formTitle, "Merch")}.pdf`);

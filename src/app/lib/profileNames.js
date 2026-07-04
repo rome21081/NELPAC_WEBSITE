@@ -26,7 +26,8 @@ function hasCompleteProfileName(profile) {
   return (
     profile?.name_completed === true &&
     fullName.split(" ").filter(Boolean).length >= 2 &&
-    Boolean(contactNumber)
+    isValidPhilippineMobile(contactNumber) &&
+    Boolean(profile?.local_church_id)
   );
 }
 
@@ -36,3 +37,4 @@ export {
   hasCompleteProfileName,
   normalizeNamePart,
 };
+import { isValidPhilippineMobile } from "./phoneNumbers";

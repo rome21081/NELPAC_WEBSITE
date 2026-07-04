@@ -77,7 +77,7 @@ function LoginPage() {
 
   return (
     <div
-      className="min-h-screen flex"
+      className="flex h-[100dvh] min-h-0 overflow-y-auto"
       style={{
         background:
           "linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%)",
@@ -178,7 +178,7 @@ function LoginPage() {
         </p>
       </div>
 
-      <div className="flex-1 flex items-center justify-center p-6">
+      <div className="flex min-h-full flex-1 items-center justify-center p-4 sm:p-6">
         <div className="w-full max-w-md">
           <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
             <div
@@ -195,7 +195,7 @@ function LoginPage() {
           </div>
 
           <div
-            className="rounded-3xl p-8"
+            className="rounded-3xl p-5 sm:p-8"
             style={{
               background: "rgba(255,255,255,0.97)",
               boxShadow: "0 25px 50px rgba(0,0,0,0.3)",

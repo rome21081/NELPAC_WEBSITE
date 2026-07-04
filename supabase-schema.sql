@@ -141,6 +141,7 @@ create table if not exists public.profiles (
   email text unique,
   avatar_url text,
   contact_number text,
+  local_church_id uuid,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -150,7 +151,8 @@ create table if not exists public.profiles (
 alter table public.profiles
   add column if not exists full_name text,
   add column if not exists name text,
-  add column if not exists name_completed boolean not null default false;
+  add column if not exists name_completed boolean not null default false,
+  add column if not exists local_church_id uuid;
 
 comment on table public.profiles is 'Public app profile for every Supabase Auth user.';
 comment on column public.profiles.role is 'Only admins should change this. Normal users are always user.';
@@ -174,6 +176,111 @@ as $$
       and role = 'admin'
   );
 $$;
+
+create or replace function public.enforce_unique_profile_contact_number()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  normalized_contact text;
+begin
+  if new.contact_number is null or nullif(trim(new.contact_number), '') is null then
+    new.contact_number := null;
+    return new;
+  end if;
+
+  normalized_contact := regexp_replace(new.contact_number, '[^0-9]', '', 'g');
+  if normalized_contact ~ '^639[0-9]{9}$' then
+    normalized_contact := '0' || substr(normalized_contact, 3);
+  elsif normalized_contact ~ '^9[0-9]{9}$' then
+    normalized_contact := '0' || normalized_contact;
+  end if;
+
+  if normalized_contact !~ '^09[0-9]{9}$' then
+    raise exception 'Contact number must be an 11-digit Philippine mobile number starting with 09';
+  end if;
+
+  new.contact_number := normalized_contact;
+
+  if exists (
+    select 1 from public.profiles existing
+    where existing.contact_number = normalized_contact
+      and existing.id <> new.id
+  ) then
+    raise exception 'CONTACT_NUMBER_ALREADY_REGISTERED';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists enforce_unique_profile_contact_number_trigger
+on public.profiles;
+create trigger enforce_unique_profile_contact_number_trigger
+before insert or update of contact_number on public.profiles
+for each row execute function public.enforce_unique_profile_contact_number();
+
+-- Existing deployments may still contain duplicate contact numbers. Create
+-- the database-level unique index only when the data is already clean. Run
+-- supabase-account-deduplication.sql to merge legacy duplicates; that script
+-- creates this same index after a successful merge.
+do $$
+begin
+  if not exists (
+    select 1
+    from public.profiles
+    where contact_number is not null
+    group by contact_number
+    having count(*) > 1
+  ) then
+    create unique index if not exists profiles_contact_number_unique
+    on public.profiles(contact_number)
+    where contact_number is not null;
+  end if;
+end;
+$$;
+
+create or replace function public.check_registration_identity(
+  p_email text,
+  p_contact_number text
+)
+returns text
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+declare
+  normalized_email text := lower(trim(coalesce(p_email, '')));
+  normalized_contact text := regexp_replace(coalesce(p_contact_number, ''), '[^0-9]', '', 'g');
+begin
+  if normalized_contact ~ '^639[0-9]{9}$' then
+    normalized_contact := '0' || substr(normalized_contact, 3);
+  elsif normalized_contact ~ '^9[0-9]{9}$' then
+    normalized_contact := '0' || normalized_contact;
+  end if;
+
+  if exists (select 1 from auth.users account where lower(account.email) = normalized_email) then
+    return 'email_exists';
+  end if;
+  if exists (select 1 from public.profiles profile where profile.contact_number = normalized_contact) then
+    return 'contact_exists';
+  end if;
+  if to_regclass('public.local_church_members') is not null
+    and exists (
+      select 1
+      from public.local_church_members member
+      where member.contact_number = normalized_contact
+    )
+  then
+    return 'member_exists';
+  end if;
+  return 'available';
+end;
+$$;
+
+revoke all on function public.check_registration_identity(text, text) from public;
+grant execute on function public.check_registration_identity(text, text) to anon, authenticated;
 
 drop policy if exists "nelpac_admin_media_public_read" on storage.objects;
 create policy "nelpac_admin_media_public_read"
@@ -210,7 +317,7 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles (id, full_name, name_completed, email, contact_number, avatar_url, role)
+  insert into public.profiles (id, full_name, name_completed, email, contact_number, local_church_id, avatar_url, role)
   values (
     new.id,
     coalesce(new.raw_user_meta_data ->> 'full_name', new.raw_user_meta_data ->> 'name', ''),
@@ -218,6 +325,7 @@ begin
       and nullif(trim(new.raw_user_meta_data ->> 'contact_number'), '') is not null,
     new.email,
     new.raw_user_meta_data ->> 'contact_number',
+    nullif(new.raw_user_meta_data ->> 'local_church_id', '')::uuid,
     new.raw_user_meta_data ->> 'avatar_url',
     'user'
   )
@@ -270,10 +378,13 @@ after insert on auth.users
 for each row execute function public.handle_new_user();
 
 -- Safe user profile update. Users can call this instead of directly updating profiles.
+drop function if exists public.update_my_profile(text, text, text);
+drop function if exists public.update_my_profile(text, text, text, uuid);
 create or replace function public.update_my_profile(
   p_full_name text default null,
   p_avatar_url text default null,
-  p_contact_number text default null
+  p_contact_number text default null,
+  p_local_church_id uuid default null
 )
 returns public.profiles
 language plpgsql
@@ -293,8 +404,15 @@ begin
     raise exception 'Please enter your first name and last name before continuing';
   end if;
 
-  if p_full_name is not null and nullif(trim(coalesce(p_contact_number, '')), '') is null then
-    raise exception 'Please enter your contact number before continuing';
+  if p_contact_number is not null and p_contact_number !~ '^09[0-9]{9}$' then
+    raise exception 'Contact number must be an 11-digit Philippine mobile number starting with 09';
+  end if;
+
+  if p_local_church_id is not null and not exists (
+    select 1 from public.local_churches
+    where id = p_local_church_id and is_active = true
+  ) then
+    raise exception 'Please select an active local church';
   end if;
 
   update public.profiles
@@ -308,12 +426,20 @@ begin
         ),
         1
       ) >= 2
-      and nullif(trim(coalesce(p_contact_number, contact_number, '')), '') is not null
+      and coalesce(p_contact_number, contact_number, '') ~ '^09[0-9]{9}$'
     ),
     avatar_url = coalesce(p_avatar_url, avatar_url),
-    contact_number = coalesce(p_contact_number, contact_number)
+    contact_number = coalesce(p_contact_number, contact_number),
+    local_church_id = coalesce(p_local_church_id, local_church_id)
   where id = auth.uid()
   returning * into updated_profile;
+
+  if p_local_church_id is not null then
+    update public.local_church_members
+    set local_church_id = p_local_church_id
+    where submitted_by = auth.uid()
+      and local_church_id is distinct from p_local_church_id;
+  end if;
 
   return updated_profile;
 end;
@@ -362,6 +488,27 @@ create table if not exists public.local_churches (
   updated_at timestamptz not null default now(),
   constraint local_churches_name_district_unique unique (name, district)
 );
+
+do $$ begin
+  alter table public.profiles
+    add constraint profiles_local_church_id_fkey
+    foreign key (local_church_id) references public.local_churches(id) on delete set null;
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  alter table public.local_churches
+    add constraint local_churches_contact_number_ph_mobile_check
+    check (contact_number is null or contact_number ~ '^09[0-9]{9}$') not valid;
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  alter table public.profiles
+    add constraint profiles_contact_number_ph_mobile_check
+    check (contact_number is null or contact_number ~ '^09[0-9]{9}$') not valid;
+exception when duplicate_object then null;
+end $$;
 
 comment on table public.local_churches is 'Normalized list of NELPAC local churches used by members, events, and reports.';
 
@@ -488,6 +635,20 @@ create table if not exists public.local_church_members (
   )
 );
 
+do $$ begin
+  alter table public.local_church_members
+    add constraint members_contact_number_ph_mobile_check
+    check (contact_number is null or contact_number ~ '^09[0-9]{9}$') not valid;
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  alter table public.local_church_members
+    add constraint members_emergency_contact_ph_mobile_check
+    check (emergency_contact is null or emergency_contact ~ '^09[0-9]{9}$') not valid;
+exception when duplicate_object then null;
+end $$;
+
 comment on table public.local_church_members is 'User-submitted church member records. Age is computed in the frontend from birthday.';
 comment on column public.local_church_members.review_status is 'Changed only through admin_review_member_application RPC or admin policies.';
 
@@ -495,6 +656,141 @@ drop trigger if exists set_local_church_members_updated_at on public.local_churc
 create trigger set_local_church_members_updated_at
 before update on public.local_church_members
 for each row execute function public.set_updated_at();
+
+create or replace function public.sync_profile_church_from_member()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.profiles
+  set local_church_id = new.local_church_id
+  where id = new.submitted_by
+    and local_church_id is null;
+  return new;
+end;
+$$;
+
+drop trigger if exists sync_profile_church_from_member_trigger
+on public.local_church_members;
+create trigger sync_profile_church_from_member_trigger
+after insert on public.local_church_members
+for each row execute function public.sync_profile_church_from_member();
+
+create or replace function public.normalize_member_name(p_name text)
+returns text
+language sql
+immutable
+set search_path = public
+as $$
+  select lower(trim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g')));
+$$;
+
+create or replace function public.enforce_unique_local_church_member()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  normalized_contact text;
+  normalized_name text;
+begin
+  normalized_contact := regexp_replace(coalesce(new.contact_number, ''), '[^0-9]', '', 'g');
+  if normalized_contact ~ '^639[0-9]{9}$' then
+    normalized_contact := '0' || substr(normalized_contact, 3);
+  elsif normalized_contact ~ '^9[0-9]{9}$' then
+    normalized_contact := '0' || normalized_contact;
+  end if;
+
+  if normalized_contact !~ '^09[0-9]{9}$' then
+    raise exception 'Member contact number must be an 11-digit Philippine mobile number starting with 09';
+  end if;
+
+  new.contact_number := normalized_contact;
+  normalized_name := public.normalize_member_name(new.name);
+
+  if exists (
+    select 1 from public.profiles profile
+    where profile.contact_number = normalized_contact
+      and profile.id <> new.submitted_by
+  ) then
+    raise exception 'MEMBER_CONTACT_ALREADY_HAS_ACCOUNT';
+  end if;
+
+  if exists (
+    select 1 from public.local_church_members member
+    where member.contact_number = normalized_contact
+      and member.id <> new.id
+  ) then
+    raise exception 'MEMBER_ALREADY_REGISTERED_CONTACT';
+  end if;
+
+  if exists (
+    select 1 from public.local_church_members member
+    where member.birthday = new.birthday
+      and public.normalize_member_name(member.name) = normalized_name
+      and member.id <> new.id
+  ) then
+    raise exception 'MEMBER_ALREADY_REGISTERED_NAME_BIRTHDAY';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists enforce_unique_local_church_member_trigger
+on public.local_church_members;
+create trigger enforce_unique_local_church_member_trigger
+before insert or update of name, birthday, contact_number, submitted_by
+on public.local_church_members
+for each row execute function public.enforce_unique_local_church_member();
+
+create index if not exists local_church_members_normalized_name_birthday_idx
+on public.local_church_members (public.normalize_member_name(name), birthday);
+
+create or replace function public.list_my_local_church_directory()
+returns table (
+  id uuid,
+  submitted_by uuid,
+  name text,
+  gender public.gender_type,
+  local_church_id uuid,
+  local_church_name text,
+  district public.nelpac_district,
+  confirmation_class_status public.confirmation_class_status,
+  activity_status public.member_activity_status,
+  review_status public.review_status,
+  created_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    member.id,
+    member.submitted_by,
+    member.name,
+    member.gender,
+    member.local_church_id,
+    church.name,
+    church.district,
+    member.confirmation_class_status,
+    member.activity_status,
+    member.review_status,
+    member.created_at
+  from public.local_church_members member
+  join public.local_churches church on church.id = member.local_church_id
+  join public.profiles viewer on viewer.id = auth.uid()
+  where member.local_church_id = viewer.local_church_id
+    and member.review_status = 'Approved'
+  order by member.name;
+$$;
+
+revoke all on function public.list_my_local_church_directory() from public;
+grant execute on function public.list_my_local_church_directory() to authenticated;
 
 create table if not exists public.member_review_logs (
   id uuid primary key default gen_random_uuid(),
@@ -2330,11 +2626,16 @@ select
   rc.reviewed_at,
   rc.claimed_at,
   rc.created_at,
-  rc.updated_at
+  rc.updated_at,
+  code.code as voucher_code,
+  code.expires_at as voucher_expires_at,
+  code.is_used as voucher_used,
+  code.used_at as voucher_used_at
 from public.reward_claims rc
-join public.rewards r on r.id = rc.reward_id;
+join public.rewards r on r.id = rc.reward_id
+left join public.redeem_codes code on code.claim_id = rc.id;
 
-comment on view public.reward_claims_with_rewards is 'Frontend view for displaying claim history with reward details.';
+comment on view public.reward_claims_with_rewards is 'Claim history with reward details and the officer-verifiable voucher generated after approval.';
 
 drop view if exists public.event_evaluation_rating_distribution;
 drop view if exists public.event_evaluation_analytics;

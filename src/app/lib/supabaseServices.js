@@ -89,6 +89,14 @@ async function getMyMembers(userId) {
   );
 }
 
+async function getMyLocalChurchDirectory() {
+  const { data, error } = await requireSupabase().rpc(
+    "list_my_local_church_directory",
+  );
+  if (error) throw error;
+  return data || [];
+}
+
 async function createMember(payload) {
   const { data, error } = await requireSupabase()
     .from("local_church_members")
@@ -908,7 +916,20 @@ async function updateMyProfile(payload) {
     p_full_name: payload.full_name || null,
     p_avatar_url: payload.avatar_url || null,
     p_contact_number: payload.contact_number || null,
+    p_local_church_id: payload.local_church_id || null,
   });
+  if (error) throw error;
+  return data;
+}
+
+async function checkRegistrationIdentity(email, contactNumber) {
+  const { data, error } = await requireSupabase().rpc(
+    "check_registration_identity",
+    {
+      p_email: email,
+      p_contact_number: contactNumber,
+    },
+  );
   if (error) throw error;
   return data;
 }
@@ -949,10 +970,12 @@ async function setUserRole(userId, role) {
 export {
   appendEventRegistrationSupplement,
   appendMerchPreorderSupplement,
+  checkRegistrationIdentity,
   createMember,
   createPointsEntry,
   compressImageFile,
   getMyMembers,
+  getMyLocalChurchDirectory,
   getEvent,
   getMerchForm,
   getMyEventRegistration,

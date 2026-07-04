@@ -13,7 +13,19 @@ import { ErrorState, LoadingState } from "../../components/DataState";
 import { CustomFormSections } from "../../components/CustomFormSections";
 import { ImageLightbox } from "../../components/ImageLightbox";
 import { useAuth } from "../../lib/authContext";
+import {
+  clearFormDraft,
+  loadFormDraft,
+  saveFormDraftData,
+  saveFormDraftFile,
+} from "../../lib/formDraftStorage";
 import { hasCompleteProfileName } from "../../lib/profileNames";
+import {
+  isValidPhilippineMobile,
+  normalizePhilippineMobile,
+  philippineMobileError,
+  philippineMobileInputProps,
+} from "../../lib/phoneNumbers";
 import {
   appendMerchPreorderSupplement,
   getMerchForm,
@@ -54,7 +66,9 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [addingAnother, setAddingAnother] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
   const proofInputRef = useRef(null);
+  const [proofFile, setProofFile] = useState(null);
   const [proofSelection, setProofSelection] = useState(null);
   const [imageViewer, setImageViewer] = useState(null);
   const [district, setDistrict] = useState("");
@@ -70,6 +84,7 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
     reference_number: "",
     custom_field_responses: {},
   });
+  const draftKey = `nelpac:merch-preorder-draft:${user.id}:${formId}`;
 
   useEffect(() => {
     Promise.all([
@@ -78,7 +93,7 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
       getMyMerchPreorder(formId),
       getMyMembers(user.id),
     ])
-      .then(([merchData, churchData, order, ownMembers]) => {
+      .then(async ([merchData, churchData, order, ownMembers]) => {
         setMerch(merchData);
         setChurches(churchData);
         setExisting(order);
@@ -123,10 +138,51 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
             local_church_id: registeredChurchId,
           }));
         }
+
+        const savedDraft = await loadFormDraft(draftKey);
+        if (savedDraft.data?.form) {
+          setForm((current) => ({ ...current, ...savedDraft.data.form }));
+          setColors(savedDraft.data.colors?.length ? savedDraft.data.colors : [newColor()]);
+          setAddingAnother(Boolean(savedDraft.data.addingAnother));
+          const draftChurch = churchData.find(
+            (item) => item.id === savedDraft.data.form.local_church_id,
+          );
+          if (draftChurch) setDistrict(draftChurch.district || "");
+        }
+        if (savedDraft.data && savedDraft.proofFile) {
+          setProofFile(savedDraft.proofFile);
+          setProofSelection({
+            name: savedDraft.proofFile.name,
+            size: savedDraft.proofFile.size,
+          });
+        }
       })
       .catch((err) => setError(err.message || "Unable to load pre-order form."))
-      .finally(() => setLoading(false));
-  }, [formId, user.id]);
+      .finally(() => {
+        setDraftReady(true);
+        setLoading(false);
+      });
+  }, [draftKey, formId, user.id]);
+
+  useEffect(() => {
+    if (!draftReady || loading || success) return undefined;
+    if (existing?.submission_status === "Submitted" && !addingAnother)
+      return undefined;
+
+    const timeout = window.setTimeout(() => {
+      saveFormDraftData(draftKey, { form, colors, addingAnother });
+    }, 350);
+    return () => window.clearTimeout(timeout);
+  }, [
+    addingAnother,
+    colors,
+    draftKey,
+    draftReady,
+    existing?.submission_status,
+    form,
+    loading,
+    success,
+  ]);
 
   const selectedChurch = churches.find(
     (item) => item.id === form.local_church_id,
@@ -172,22 +228,30 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
     setError("");
     if (!file) {
       if (proofInputRef.current) proofInputRef.current.value = "";
+      setProofFile(null);
       setProofSelection(null);
+      void saveFormDraftFile(draftKey, null);
       return;
     }
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
       if (proofInputRef.current) proofInputRef.current.value = "";
+      setProofFile(null);
       setProofSelection(null);
+      void saveFormDraftFile(draftKey, null);
       setError("Proof of payment must be a JPG, PNG, or WebP image.");
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
       if (proofInputRef.current) proofInputRef.current.value = "";
+      setProofFile(null);
       setProofSelection(null);
+      void saveFormDraftFile(draftKey, null);
       setError("Proof of payment must be 10 MB or smaller.");
       return;
     }
+    setProofFile(file);
     setProofSelection({ name: file.name, size: file.size });
+    void saveFormDraftFile(draftKey, file);
   };
   const submit = async (event) => {
     event.preventDefault();
@@ -205,6 +269,8 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
       return setError(
         "Your account has no registered local church. Update your member registration before using this form.",
       );
+    if (!isValidPhilippineMobile(form.president_contact_number))
+      return setError(philippineMobileError);
     if (totalQuantity <= 0)
       return setError("Add at least one item to the order.");
     if (merch.merch_type === "Shirt" && availableShirtColors.length === 0)
@@ -231,7 +297,8 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
       return setError(
         "Select a shirt color from the administrator's available colors.",
       );
-    const selectedProofFile = proofInputRef.current?.files?.[0] || null;
+    const selectedProofFile =
+      proofFile || proofInputRef.current?.files?.[0] || null;
     if (
       !selectedProofFile &&
       (addingAnother || !existing?.proof_of_payment_url)
@@ -298,6 +365,7 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
           shirtItems,
         });
       }
+      await clearFormDraft(draftKey);
       setAddingAnother(false);
       setSuccess(true);
     } catch (err) {
@@ -324,7 +392,9 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
             setSuccess(false);
             setAddingAnother(true);
             setColors([newColor()]);
+            setProofFile(null);
             setProofSelection(null);
+            void saveFormDraftFile(draftKey, null);
             if (proofInputRef.current) proofInputRef.current.value = "";
             setForm((current) => ({
               ...current,
@@ -405,6 +475,10 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
         </div>
       </header>
       <form onSubmit={submit} className="mt-5 space-y-5">
+        <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800">
+          Your progress is saved automatically on this device. You can leave,
+          reload, and return without re-entering your details.
+        </div>
         <section className="rounded-2xl border border-violet-200 bg-violet-50 p-5 text-sm leading-6 text-violet-900">
           <strong className="block">Before you begin</strong>
           <p>{merch.guide_text}</p>
@@ -527,12 +601,15 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
             <label className="text-sm font-semibold">
               President Contact Number
               <input
+                {...philippineMobileInputProps}
                 required
                 value={form.president_contact_number}
                 onChange={(e) =>
                   setForm((f) => ({
                     ...f,
-                    president_contact_number: e.target.value,
+                    president_contact_number: normalizePhilippineMobile(
+                      e.target.value,
+                    ),
                   }))
                 }
                 className={inputClass}

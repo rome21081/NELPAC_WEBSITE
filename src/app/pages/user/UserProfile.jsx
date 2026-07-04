@@ -13,7 +13,14 @@ import {
   normalizeNamePart,
 } from "../../lib/profileNames";
 import {
+  isValidPhilippineMobile,
+  normalizePhilippineMobile,
+  philippineMobileError,
+  philippineMobileInputProps,
+} from "../../lib/phoneNumbers";
+import {
   getMyMembers,
+  listLocalChurches,
   listPointBalances,
   updateMyProfile,
   uploadProfileAvatar,
@@ -30,16 +37,18 @@ function UserProfile() {
   const [searchParams, setSearchParams] = useSearchParams();
   const mustCompleteName = searchParams.get("completeName") === "1";
   const { data, loading, error } = useSupabaseData(async () => {
-    const [members, balances] = await Promise.all([
+    const [members, balances, churches] = await Promise.all([
       getMyMembers(user.id),
       listPointBalances(),
+      listLocalChurches({ activeOnly: true }),
     ]);
-    return [{ members, balances }];
+    return [{ members, balances, churches }];
   }, [user?.id]);
   const [editing, setEditing] = useState(mustCompleteName);
   const [form, setForm] = useState({
     ...emptyNameFields,
     contact_number: "",
+    local_church_id: "",
     avatar_url: "",
     avatarFile: null,
   });
@@ -54,6 +63,7 @@ function UserProfile() {
     setForm((current) => ({
       ...current,
       contact_number: profile.contact_number || "",
+      local_church_id: profile.local_church_id || "",
       avatar_url: profile.avatar_url || "",
       avatarFile: null,
     }));
@@ -64,12 +74,15 @@ function UserProfile() {
   }, [mustCompleteName]);
 
   if (loading) return <LoadingState label="Loading profile..." />;
-  const { members = [], balances = [] } = data[0] || {};
+  const { members = [], balances = [], churches = [] } = data[0] || {};
   const member = members[0];
   const points =
     balances.find((balance) => balance.user_id === user.id)?.points_balance ||
     0;
   const displayName = getProfileDisplayName(profile);
+  const selectedProfileChurch = churches.find(
+    (church) => church.id === form.local_church_id,
+  );
 
   const beginEdit = () => {
     setForm((current) => ({ ...current, ...emptyNameFields }));
@@ -83,6 +96,7 @@ function UserProfile() {
     setForm({
       ...emptyNameFields,
       contact_number: profile.contact_number || "",
+      local_church_id: profile.local_church_id || "",
       avatar_url: profile.avatar_url || "",
       avatarFile: null,
     });
@@ -104,11 +118,15 @@ function UserProfile() {
       });
       return;
     }
-    if (!normalizeNamePart(form.contact_number)) {
+    if (!isValidPhilippineMobile(form.contact_number)) {
       setNotice({
         type: "error",
-        text: "Please enter your contact number before continuing.",
+        text: philippineMobileError,
       });
+      return;
+    }
+    if (!form.local_church_id) {
+      setNotice({ type: "error", text: "Please select your local church." });
       return;
     }
     const fullName = buildFullName(firstName, middleName, lastName);
@@ -124,7 +142,8 @@ function UserProfile() {
       }
       await updateMyProfile({
         full_name: fullName,
-        contact_number: normalizeNamePart(form.contact_number),
+        contact_number: normalizePhilippineMobile(form.contact_number),
+        local_church_id: form.local_church_id,
         avatar_url: avatarUrl,
       });
       await refreshProfile();
@@ -315,15 +334,38 @@ function UserProfile() {
             <label className="text-sm font-semibold text-slate-600">
               Contact number <span className="text-red-500">*</span>
               <input
+                {...philippineMobileInputProps}
                 required={editing}
                 readOnly={!editing}
-                inputMode="tel"
                 className={inputClass}
                 value={form.contact_number}
                 onChange={(event) =>
-                  update("contact_number", event.target.value)
+                  update(
+                    "contact_number",
+                    normalizePhilippineMobile(event.target.value),
+                  )
                 }
               />
+            </label>
+            <label className="text-sm font-semibold text-slate-600">
+              Local church <span className="text-red-500">*</span>
+              <select
+                required={editing}
+                disabled={!editing}
+                className={inputClass}
+                value={form.local_church_id}
+                onChange={(event) => update("local_church_id", event.target.value)}
+              >
+                <option value="">Select local church</option>
+                {churches.map((church) => (
+                  <option key={church.id} value={church.id}>
+                    {church.name} - {church.district}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs font-normal text-slate-400">
+                District: {selectedProfileChurch?.district || "Not selected"}
+              </span>
             </label>
             <label className="text-sm font-semibold text-slate-600">
               Email

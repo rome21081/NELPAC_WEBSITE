@@ -30,7 +30,7 @@ async function fetchProfile(userId) {
   if (!userId) return null;
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, role, full_name, name, name_completed, email, avatar_url, contact_number")
+    .select("id, role, full_name, name, name_completed, email, avatar_url, contact_number, local_church_id")
     .eq("id", userId)
     .single();
   if (error) throw error;

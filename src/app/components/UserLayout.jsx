@@ -11,6 +11,7 @@ import {
   LogOut,
   Users,
   Menu,
+  X,
   ChevronDown,
   ShoppingBag,
   AlertTriangle,
@@ -22,6 +23,7 @@ import {
   hasCompleteProfileName,
 } from "../lib/profileNames";
 import { useAuth } from "../lib/authContext";
+import { isValidPhilippineMobile } from "../lib/phoneNumbers";
 import { useSupabaseData } from "../lib/useSupabaseData";
 import {
   getMyMembers,
@@ -64,6 +66,24 @@ function UserLayout() {
       location.pathname === path || location.pathname.startsWith(`${path}/`)
     );
   };
+  const currentPage =
+    [...navItems]
+      .sort((a, b) => b.path.length - a.path.length)
+      .find((item) => isActive(item.path))?.label || "Youth Portal";
+
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+    setProfileOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!mobileSidebarOpen) return undefined;
+    const close = (event) => {
+      if (event.key === "Escape") setMobileSidebarOpen(false);
+    };
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, [mobileSidebarOpen]);
   const { data: myMembers } = useSupabaseData(
     () => (user ? getMyMembers(user.id) : Promise.resolve([])),
     [user?.id],
@@ -127,7 +147,10 @@ function UserLayout() {
     profile.full_name?.trim().split(/\s+/).filter(Boolean).length >= 2
       ? null
       : "First name and last name",
-    profile.contact_number?.trim() ? null : "Contact number",
+    isValidPhilippineMobile(profile.contact_number)
+      ? null
+      : "Valid 11-digit mobile number",
+    profile.local_church_id ? null : "Local church",
   ].filter(Boolean);
   const initials = displayName.charAt(0).toUpperCase();
   const logout = async () => {
@@ -165,7 +188,7 @@ function UserLayout() {
     await reloadNotifications();
   };
   return (
-    <div className="fixed inset-0 flex overflow-hidden bg-slate-50">
+    <div className="flex h-[100dvh] min-h-0 w-full overflow-hidden bg-slate-50 text-slate-900">
       {!profileIsComplete && !profileUpdatePromptAcknowledged && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
@@ -227,7 +250,7 @@ function UserLayout() {
       {/* Mobile overlay */}
       {mobileSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 z-40 bg-slate-950/55 backdrop-blur-[2px] lg:hidden"
           onClick={() => setMobileSidebarOpen(false)}
         />
       )}
@@ -235,8 +258,8 @@ function UserLayout() {
       {/* Sidebar */}
       <aside
         className={`
-          fixed lg:static inset-y-0 left-0 z-50 w-64 flex flex-col
-          transition-transform duration-300 ease-in-out
+          fixed inset-y-0 left-0 z-50 flex w-[min(88vw,20rem)] flex-col shadow-2xl shadow-slate-950/30
+          transition-transform duration-300 ease-in-out lg:static lg:w-72 lg:shadow-none
           ${mobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
         `}
         style={{
@@ -244,7 +267,7 @@ function UserLayout() {
         }}
       >
         {/* Logo */}
-        <div className="flex items-center gap-3 px-5 py-5 border-b border-white/10">
+        <div className="flex min-h-20 items-center gap-3 border-b border-white/10 px-5 py-4">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden bg-white">
             <img
               src={nelpacLogo}
@@ -266,6 +289,14 @@ function UserLayout() {
               SYSTEM
             </p>
           </div>
+          <button
+            type="button"
+            aria-label="Close navigation"
+            onClick={() => setMobileSidebarOpen(false)}
+            className="ml-auto flex h-10 w-10 items-center justify-center rounded-xl text-slate-300 hover:bg-white/10 hover:text-white lg:hidden"
+          >
+            <X size={20} />
+          </button>
         </div>
 
         {/* User badge */}
@@ -342,7 +373,7 @@ function UserLayout() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-3 px-3">
+        <nav className="app-scrollbar flex-1 overflow-y-auto px-3 py-3">
           <p
             className="text-slate-500 mb-2 px-2"
             style={{
@@ -362,7 +393,7 @@ function UserLayout() {
                 to={item.path}
                 onClick={() => setMobileSidebarOpen(false)}
                 className={`
-                  flex items-center gap-3 px-3 py-2.5 rounded-xl mb-0.5 transition-all duration-200
+                  mb-0.5 flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 transition-all duration-200
                   ${active ? "bg-white/15 text-white" : "text-slate-400 hover:bg-white/8 hover:text-white"}
                 `}
               >
@@ -401,24 +432,24 @@ function UserLayout() {
       {/* Main */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {/* Top Navbar */}
-        <header className="bg-white border-b border-slate-200 px-4 lg:px-6 py-3 flex items-center gap-4 flex-shrink-0">
+        <header className="flex min-h-16 flex-shrink-0 items-center gap-3 border-b border-slate-200/80 bg-white/95 px-3 shadow-sm backdrop-blur sm:px-5 lg:px-7">
           <button
-            className="lg:hidden flex items-center justify-center w-9 h-9 rounded-lg text-slate-500 hover:bg-slate-100"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-600 shadow-sm hover:bg-slate-50 lg:hidden"
             onClick={() => setMobileSidebarOpen(true)}
           >
             <Menu style={{ width: 20, height: 20 }} />
           </button>
 
-          <div className="flex items-center gap-2">
-            <span
-              className="text-slate-800 text-sm hidden sm:block"
-              style={{ fontWeight: 600 }}
-            >
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">
               NELPAC Youth Portal
-            </span>
+            </p>
+            <h1 className="truncate text-sm font-extrabold text-slate-950 sm:text-base">
+              {currentPage}
+            </h1>
           </div>
 
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-3">
             <NotificationCenter
               notifications={notifications}
               loading={notificationsLoading}
@@ -436,7 +467,7 @@ function UserLayout() {
             <div className="relative">
               <button
                 onClick={() => setProfileOpen(!profileOpen)}
-                className="flex items-center gap-2 hover:bg-slate-100 rounded-xl px-2 py-1.5 transition-colors"
+                className="flex min-h-11 items-center gap-2 rounded-xl px-1.5 py-1.5 transition-colors hover:bg-slate-100 sm:px-2"
               >
                 <div
                   className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm overflow-hidden bg-slate-100"
@@ -477,7 +508,7 @@ function UserLayout() {
                 />
               </button>
               {profileOpen && (
-                <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-200 py-2 z-50">
+                <div className="absolute right-0 top-full z-50 mt-2 w-52 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1.5 shadow-2xl shadow-slate-900/10">
                   <Link
                     to="/user/profile"
                     className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
@@ -498,8 +529,10 @@ function UserLayout() {
           </div>
         </header>
 
-        <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 lg:p-6">
-          <Outlet />
+        <main className="app-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain p-3 sm:p-5 lg:p-7">
+          <div className="mx-auto w-full max-w-[1600px]">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

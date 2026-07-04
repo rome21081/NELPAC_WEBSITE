@@ -173,16 +173,35 @@ function UserRewards({ embedded = false }) {
         ) : (
           <div className="divide-y divide-slate-100">
             {myClaims.map((claim) => (
-              <div
-                key={claim.id}
-                className="flex items-center justify-between gap-4 py-3 text-sm"
-              >
-                <span className="font-bold text-slate-800">
-                  {claim.reward_name}
-                </span>
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
-                  {claim.claim_status}
-                </span>
+              <div key={claim.id} className="py-3 text-sm">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="font-bold text-slate-800">
+                    {claim.reward_name}
+                  </span>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
+                    {claim.claim_status}
+                  </span>
+                </div>
+                {claim.voucher_code && (
+                  <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-emerald-700">
+                      Officer verification voucher
+                    </p>
+                    <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+                      <code className="text-lg font-black tracking-[0.18em] text-emerald-950">
+                        {claim.voucher_code}
+                      </code>
+                      <span className="text-xs font-semibold text-emerald-800">
+                        {claim.voucher_used
+                          ? "Already claimed"
+                          : `Valid until ${claim.voucher_expires_at?.slice(0, 10)}`}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-emerald-800">
+                      Show this code to a NELPAC officer when receiving your reward.
+                    </p>
+                  </div>
+                )}
               </div>
             ))}
           </div>

@@ -61,7 +61,7 @@ function ForgotPasswordPage() {
     }
   };
 
-  return <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4 py-8">
+  return <div className="flex h-[100dvh] min-h-0 items-center justify-center overflow-y-auto bg-slate-950 px-4 py-8">
     <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-2xl">
       <div className="mb-6 flex items-center gap-3">
         <div className="h-11 w-11 overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200">

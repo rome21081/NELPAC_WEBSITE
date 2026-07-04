@@ -127,7 +127,7 @@ function UserOneCard() {
           </div>
         </div>
       </section>
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="mb-1 text-lg font-black text-slate-950">
           Redeem One Card Code
         </h2>
@@ -162,31 +162,8 @@ function UserOneCard() {
           </p>
         )}
       </section>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-3 font-black text-slate-950">Points Ledger</h2>
-          {ledger.length === 0 ? (
-            <EmptyState label="No points yet." />
-          ) : (
-            ledger.map((entry) => (
-              <div
-                key={entry.id}
-                className="flex justify-between gap-4 border-b border-slate-100 py-3 text-sm"
-              >
-                <span className="text-slate-600">{entry.description}</span>
-                <strong
-                  className={
-                    entry.points > 0 ? "text-emerald-700" : "text-red-700"
-                  }
-                >
-                  {entry.points > 0 ? "+" : ""}
-                  {entry.points}
-                </strong>
-              </div>
-            ))
-          )}
-        </section>
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="mb-3 font-black text-slate-950">
             Available One Card Codes
           </h2>
@@ -196,7 +173,7 @@ function UserOneCard() {
             availableCodes.map((code) => (
               <div
                 key={code.id}
-                className="flex justify-between gap-3 border-b border-slate-100 py-3 text-sm"
+                className="flex justify-between gap-3 border-b border-slate-100 py-2.5 text-sm last:border-0"
               >
                 <div>
                   <b className="tracking-wide text-slate-900">{code.code}</b>
@@ -211,15 +188,19 @@ function UserOneCard() {
             ))
           )}
         </section>
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="mb-3 font-black text-slate-950">Reward Claim Codes</h2>
+          <p className="mb-3 text-xs leading-5 text-slate-500">
+            Show this voucher code to a NELPAC officer when collecting an
+            approved reward.
+          </p>
           {rewardCodes.length === 0 ? (
             <EmptyState label="No reward claim codes yet." />
           ) : (
             rewardCodes.map((code) => (
               <div
                 key={code.id}
-                className="flex justify-between gap-4 border-b border-slate-100 py-3 text-sm"
+                className="flex justify-between gap-4 border-b border-slate-100 py-2.5 text-sm last:border-0"
               >
                 <b className="tracking-wide">{code.code}</b>
                 <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
@@ -229,6 +210,31 @@ function UserOneCard() {
                 </span>
               </div>
             ))
+          )}
+        </section>
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2">
+          <h2 className="mb-3 font-black text-slate-950">Points Ledger</h2>
+          {ledger.length === 0 ? (
+            <EmptyState label="No points yet." />
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {ledger.map((entry) => (
+                <div
+                  key={entry.id}
+                  className="flex justify-between gap-4 py-2.5 text-sm"
+                >
+                  <span className="min-w-0 truncate text-slate-600">
+                    {entry.description}
+                  </span>
+                  <strong
+                    className={`shrink-0 ${entry.points > 0 ? "text-emerald-700" : "text-red-700"}`}
+                  >
+                    {entry.points > 0 ? "+" : ""}
+                    {entry.points}
+                  </strong>
+                </div>
+              ))}
+            </div>
           )}
         </section>
       </div>

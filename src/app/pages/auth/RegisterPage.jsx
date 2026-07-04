@@ -3,9 +3,16 @@ import { useNavigate, Link } from "react-router";
 import { Upload, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { getActiveLocalChurchesByDistrict } from "../../lib/localChurches";
 import { buildFullName } from "../../lib/profileNames";
+import {
+  isValidPhilippineMobile,
+  normalizePhilippineMobile,
+  philippineMobileError,
+  philippineMobileInputProps,
+} from "../../lib/phoneNumbers";
 import { supabase } from "../../lib/supabaseClient";
 import nelpacLogo from "../../../../NELPAC-LOGO.jpg";
 import {
+  checkRegistrationIdentity,
   updateMyProfile,
   uploadProfileAvatar,
 } from "../../lib/supabaseServices";
@@ -140,6 +147,15 @@ function RegisterPage() {
       return;
     }
 
+    if (
+      !isValidPhilippineMobile(form.contactNumber) ||
+      !isValidPhilippineMobile(form.emergencyContact)
+    ) {
+      setMessage(philippineMobileError);
+      setStep(0);
+      return;
+    }
+
     if (form.password.length < 6) {
       setMessage("Password must be at least 6 characters.");
       setStep(2);
@@ -156,6 +172,32 @@ function RegisterPage() {
     setMessage("");
 
     try {
+      const identityStatus = await checkRegistrationIdentity(
+        form.email,
+        form.contactNumber,
+      );
+      if (identityStatus === "email_exists") {
+        setMessage(
+          "This email is already registered. Try signing in or use Forgot Password to recover your account.",
+        );
+        setStep(2);
+        return;
+      }
+      if (identityStatus === "contact_exists") {
+        setMessage(
+          "This mobile number is already linked to an account. Try signing in with your existing email, use Forgot Password, or contact a NELPAC administrator.",
+        );
+        setStep(0);
+        return;
+      }
+      if (identityStatus === "member_exists") {
+        setMessage(
+          "This person already has a local church member directory record. Contact a NELPAC administrator to verify it before creating an account.",
+        );
+        setStep(0);
+        return;
+      }
+
       const fullName = buildFullName(
         form.firstName,
         form.middleName,
@@ -201,11 +243,24 @@ function RegisterPage() {
       await updateMyProfile({
         full_name: fullName,
         contact_number: form.contactNumber,
+        local_church_id: form.localChurchId,
         avatar_url: avatarUrl,
       });
       navigate("/");
     } catch (error) {
-      setMessage(error.message || "Unable to submit registration.");
+      const errorMessage = error.message || "";
+      setMessage(
+        errorMessage.includes("already registered") ||
+          errorMessage.includes("User already registered")
+          ? "This email is already registered. Try signing in or use Forgot Password to recover your account."
+          : errorMessage.includes("CONTACT_NUMBER_ALREADY_REGISTERED") ||
+              errorMessage.includes("profiles_contact_number")
+            ? "This mobile number is already linked to an account. Try signing in, use Forgot Password, or contact a NELPAC administrator."
+            : errorMessage.includes("MEMBER_ALREADY_REGISTERED") ||
+                errorMessage.includes("MEMBER_CONTACT_ALREADY_HAS_ACCOUNT")
+              ? "This person already has a local church member directory record. Contact a NELPAC administrator to verify it before creating an account."
+            : errorMessage || "Unable to submit registration.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -243,6 +298,14 @@ function RegisterPage() {
       setMessage(`${missing[1]} is required.`);
       return false;
     }
+    if (
+      step === 0 &&
+      (!isValidPhilippineMobile(form.contactNumber) ||
+        !isValidPhilippineMobile(form.emergencyContact))
+    ) {
+      setMessage(philippineMobileError);
+      return false;
+    }
     if (step === 2 && form.password !== form.confirmPassword) {
       setMessage("Passwords do not match.");
       return false;
@@ -262,7 +325,7 @@ function RegisterPage() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-4"
+      className="flex h-[100dvh] min-h-0 items-start justify-center overflow-y-auto p-3 sm:items-center sm:p-4"
       style={{
         background:
           "linear-gradient(135deg, #0f172a 0%, #1e3a5f 60%, #0f172a 100%)",
@@ -440,7 +503,7 @@ function RegisterPage() {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <label
                     className={labelClass}
@@ -475,7 +538,7 @@ function RegisterPage() {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <label
                     className={labelClass}
@@ -502,10 +565,15 @@ function RegisterPage() {
                     Contact number *
                   </label>
                   <input
+                    {...philippineMobileInputProps}
                     className={inputClass}
-                    placeholder="Contact number"
                     value={form.contactNumber}
-                    onChange={(e) => update("contactNumber", e.target.value)}
+                    onChange={(e) =>
+                      update(
+                        "contactNumber",
+                        normalizePhilippineMobile(e.target.value),
+                      )
+                    }
                   />
                 </div>
               </div>
@@ -545,10 +613,15 @@ function RegisterPage() {
                   Emergency contact *
                 </label>
                 <input
+                  {...philippineMobileInputProps}
                   className={inputClass}
-                  placeholder="Emergency contact"
                   value={form.emergencyContact}
-                  onChange={(e) => update("emergencyContact", e.target.value)}
+                  onChange={(e) =>
+                    update(
+                      "emergencyContact",
+                      normalizePhilippineMobile(e.target.value),
+                    )
+                  }
                 />
               </div>
             </div>
@@ -562,7 +635,7 @@ function RegisterPage() {
               >
                 Church Status
               </h2>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">
                     District
@@ -598,7 +671,7 @@ function RegisterPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">
                     Are you a professing member?
@@ -629,7 +702,7 @@ function RegisterPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">
                     Confirmation Class Status
@@ -736,9 +809,23 @@ function RegisterPage() {
           )}
 
           {message && (
-            <p className="mt-4 text-red-600" style={{ fontSize: "12px" }}>
-              {message}
-            </p>
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-red-700">
+              <p style={{ fontSize: "12px" }}>{message}</p>
+              {(message.includes("already registered") ||
+                message.includes("already linked")) && (
+                <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
+                  <Link to="/" className="rounded-lg bg-white px-3 py-2 ring-1 ring-red-200">
+                    Sign in
+                  </Link>
+                  <Link
+                    to="/forgot-password"
+                    className="rounded-lg bg-red-700 px-3 py-2 text-white"
+                  >
+                    Forgot Password
+                  </Link>
+                </div>
+              )}
+            </div>
           )}
 
           <div className="flex gap-3 mt-6">

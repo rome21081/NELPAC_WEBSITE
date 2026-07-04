@@ -17,12 +17,21 @@ import {
 } from "../../components/DataState";
 import { useAuth } from "../../lib/authContext";
 import { useSupabaseData } from "../../lib/useSupabaseData";
-import { getActiveLocalChurchesByDistrict } from "../../lib/localChurches";
+import {
+  isValidPhilippineMobile,
+  normalizePhilippineMobile,
+  philippineMobileError,
+  philippineMobileInputProps,
+} from "../../lib/phoneNumbers";
 import {
   createLocalChurchMember,
   saveMyMemberApplication,
 } from "../../lib/localChurchMembers";
-import { getMyMembers } from "../../lib/supabaseServices";
+import {
+  getMyLocalChurchDirectory,
+  getMyMembers,
+  listLocalChurches,
+} from "../../lib/supabaseServices";
 
 const emptyForm = {
   name: "",
@@ -48,8 +57,6 @@ const requiredFields = [
   ["address", "Address"],
   ["parentGuardianName", "Parent/guardian name"],
   ["emergencyContact", "Emergency contact"],
-  ["district", "District"],
-  ["localChurchId", "Local church"],
   ["professingMember", "Professing member"],
   ["confirmationClassStatus", "Confirmation class status"],
   ["activityStatus", "Activity status"],
@@ -66,14 +73,29 @@ function fieldError(errors, field) {
 }
 
 function LocalChurchMembers() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const {
     data: members,
     loading,
     error,
     reload,
-  } = useSupabaseData(() => getMyMembers(user.id), [user?.id]);
-  const [churches, setChurches] = useState([]);
+  } = useSupabaseData(async () => {
+    const [directoryMembers, myApplications] = await Promise.all([
+      getMyLocalChurchDirectory(),
+      getMyMembers(user.id),
+    ]);
+    const membersById = new Map(
+      directoryMembers.map((member) => [member.id, member]),
+    );
+    myApplications.forEach((member) => membersById.set(member.id, member));
+    return [...membersById.values()].sort((left, right) =>
+      String(left.name || "").localeCompare(String(right.name || "")),
+    );
+  }, [user?.id, profile?.local_church_id]);
+  const { data: churches } = useSupabaseData(
+    () => listLocalChurches({ activeOnly: true }),
+    [],
+  );
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState("");
   const [message, setMessage] = useState("");
@@ -82,11 +104,18 @@ function LocalChurchMembers() {
   const [display, setDisplay] = useState("tiles");
   const [search, setSearch] = useState("");
 
+  const profileChurch = (churches || []).find(
+    (church) => church.id === profile?.local_church_id,
+  );
+
   useEffect(() => {
-    getActiveLocalChurchesByDistrict(form.district)
-      .then(setChurches)
-      .catch(() => setChurches([]));
-  }, [form.district]);
+    if (!profileChurch) return;
+    setForm((current) => ({
+      ...current,
+      district: profileChurch.district,
+      localChurchId: profileChurch.id,
+    }));
+  }, [profileChurch]);
 
   const update = (field, value) => {
     setMessage("");
@@ -94,7 +123,6 @@ function LocalChurchMembers() {
     setForm((current) => ({
       ...current,
       [field]: value,
-      ...(field === "district" ? { localChurchId: "" } : {}),
     }));
   };
 
@@ -104,6 +132,11 @@ function LocalChurchMembers() {
       if (!String(form[field] || "").trim())
         nextErrors[field] = `${label} is required.`;
     });
+    if (!isValidPhilippineMobile(form.contactNumber))
+      nextErrors.contactNumber = philippineMobileError;
+    if (!isValidPhilippineMobile(form.emergencyContact))
+      nextErrors.emergencyContact = philippineMobileError;
+    if (!profileChurch) nextErrors.localChurchId = "Set your local church in My Profile first.";
     setFormErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -118,16 +151,34 @@ function LocalChurchMembers() {
       return;
     }
     try {
-      if (editingId) await saveMyMemberApplication(editingId, form);
-      else await createLocalChurchMember(form, user.id);
-      setForm(emptyForm);
+      const memberForm = {
+        ...form,
+        district: profileChurch.district,
+        localChurchId: profileChurch.id,
+      };
+      if (editingId) await saveMyMemberApplication(editingId, memberForm);
+      else await createLocalChurchMember(memberForm, user.id);
+      setForm({
+        ...emptyForm,
+        district: profileChurch.district,
+        localChurchId: profileChurch.id,
+      });
       setEditingId("");
       setFormErrors({});
       await reload();
       setMessage("Member application saved for admin review.");
       setView("directory");
     } catch (err) {
-      setMessage(err.message || "Unable to save member application.");
+      const errorMessage = err.message || "";
+      setMessage(
+        errorMessage.includes("MEMBER_CONTACT_ALREADY_HAS_ACCOUNT")
+          ? "This contact number already belongs to a registered user account. That person cannot be added again."
+          : errorMessage.includes("MEMBER_ALREADY_REGISTERED_CONTACT")
+            ? "A local church member with this contact number is already registered."
+            : errorMessage.includes("MEMBER_ALREADY_REGISTERED_NAME_BIRTHDAY")
+              ? "A member with the same name and birthday is already registered. Please check the member directory."
+              : errorMessage || "Unable to save member application.",
+      );
     }
   };
 
@@ -143,8 +194,8 @@ function LocalChurchMembers() {
       gender: member.gender || "",
       address: member.address || "",
       parentGuardianName: member.parent_guardian_name || "",
-      district: member.district || "ISED",
-      localChurchId: member.local_church_id || "",
+      district: profileChurch?.district || "",
+      localChurchId: profileChurch?.id || "",
       professingMember: member.professing_member || "No",
       confirmationClassYear: member.confirmation_class_year || "",
       confirmationClassStatus:
@@ -157,7 +208,11 @@ function LocalChurchMembers() {
 
   const cancelEdit = () => {
     setEditingId("");
-    setForm(emptyForm);
+    setForm({
+      ...emptyForm,
+      district: profileChurch?.district || "",
+      localChurchId: profileChurch?.id || "",
+    });
     setFormErrors({});
     setMessage("");
   };
@@ -211,7 +266,7 @@ function LocalChurchMembers() {
             <span>
               <strong className="block text-slate-950">Member Directory</strong>
               <small className="text-slate-500">
-                {members.length} submitted member
+                {members.length} church member
                 {members.length === 1 ? "" : "s"}
               </small>
             </span>
@@ -299,18 +354,30 @@ function LocalChurchMembers() {
           <label className={labelClass}>
             Contact number *
             <input
+              {...philippineMobileInputProps}
               className={inputClass}
               value={form.contactNumber}
-              onChange={(e) => update("contactNumber", e.target.value)}
+              onChange={(e) =>
+                update(
+                  "contactNumber",
+                  normalizePhilippineMobile(e.target.value),
+                )
+              }
             />
             {fieldError(formErrors, "contactNumber")}
           </label>
           <label className={labelClass}>
             Emergency contact *
             <input
+              {...philippineMobileInputProps}
               className={inputClass}
               value={form.emergencyContact}
-              onChange={(e) => update("emergencyContact", e.target.value)}
+              onChange={(e) =>
+                update(
+                  "emergencyContact",
+                  normalizePhilippineMobile(e.target.value),
+                )
+              }
             />
             {fieldError(formErrors, "emergencyContact")}
           </label>
@@ -346,34 +413,21 @@ function LocalChurchMembers() {
             />
             {fieldError(formErrors, "address")}
           </label>
-          <label className={labelClass}>
-            District *
-            <select
-              className={inputClass}
-              value={form.district}
-              onChange={(e) => update("district", e.target.value)}
-            >
-              <option>ISED</option>
-              <option>ISIED</option>
-            </select>
-            {fieldError(formErrors, "district")}
-          </label>
-          <label className={labelClass}>
-            Local church *
-            <select
-              className={inputClass}
-              value={form.localChurchId}
-              onChange={(e) => update("localChurchId", e.target.value)}
-            >
-              <option value="">Select local church</option>
-              {churches.map((church) => (
-                <option key={church.id} value={church.id}>
-                  {church.name}
-                </option>
-              ))}
-            </select>
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 md:col-span-2">
+            <p className="text-xs font-black uppercase tracking-wider text-blue-700">
+              Local church assigned automatically
+            </p>
+            <p className="mt-1 font-bold text-blue-950">
+              {profileChurch
+                ? `${profileChurch.name} - ${profileChurch.district}`
+                : "No local church selected"}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-blue-700">
+              Every member you add belongs to your profile's local church. To
+              correct it, update My Profile first.
+            </p>
             {fieldError(formErrors, "localChurchId")}
-          </label>
+          </div>
           <label className={labelClass}>
             Professing member *
             <select
@@ -465,7 +519,7 @@ function LocalChurchMembers() {
             </div>
           </div>
           {filteredMembers.length === 0 ? (
-            <EmptyState label="No member applications yet." />
+            <EmptyState label="No local church members found." />
           ) : (
             <div
               className={
@@ -522,7 +576,8 @@ function LocalChurchMembers() {
                     >
                       {member.review_status}
                     </span>
-                    {["Pending", "Rejected"].includes(member.review_status) && (
+                    {member.submitted_by === user.id &&
+                      ["Pending", "Rejected"].includes(member.review_status) && (
                       <button
                         type="button"
                         onClick={() => edit(member)}
@@ -530,7 +585,7 @@ function LocalChurchMembers() {
                       >
                         <Pencil size={13} /> Edit
                       </button>
-                    )}
+                      )}
                   </div>
                 </article>
               ))}

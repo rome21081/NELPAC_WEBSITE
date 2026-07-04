@@ -23,6 +23,12 @@ import {
 } from "../../lib/formDraftStorage";
 import { hasCompleteProfileName } from "../../lib/profileNames";
 import {
+  isValidPhilippineMobile,
+  normalizePhilippineMobile,
+  philippineMobileError,
+  philippineMobileInputProps,
+} from "../../lib/phoneNumbers";
+import {
   appendEventRegistrationSupplement,
   getEvent,
   getMyMembers,
@@ -157,7 +163,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
           );
           if (draftChurch) setDistrict(draftChurch.district || "");
         }
-        if (savedDraft.proofFile) {
+        if (savedDraft.data && savedDraft.proofFile) {
           setProofFile(savedDraft.proofFile);
           setProofSelection({
             name: savedDraft.proofFile.name,
@@ -269,13 +275,17 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
     }
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
       if (proofInputRef.current) proofInputRef.current.value = "";
+      setProofFile(null);
       setProofSelection(null);
+      void saveFormDraftFile(draftKey, null);
       setError("Proof of payment must be a JPG, PNG, or WebP image.");
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
       if (proofInputRef.current) proofInputRef.current.value = "";
+      setProofFile(null);
       setProofSelection(null);
+      void saveFormDraftFile(draftKey, null);
       setError("Proof of payment must be 10 MB or smaller.");
       return;
     }
@@ -300,6 +310,11 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
       return setError(
         "Your account has no registered local church. Update your member registration before using this form.",
       );
+    if (
+      !isValidPhilippineMobile(form.worker_contact_number) ||
+      !isValidPhilippineMobile(form.president_contact_number)
+    )
+      return setError(philippineMobileError);
     if (!totalDelegates) return setError("Enter at least one delegate.");
     if (
       delegates.some((delegate) => !delegate.name.trim() || delegate.age === "")
@@ -500,8 +515,8 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
       ) : (
         <form onSubmit={submit} className="mt-5 space-y-5">
           <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-            Your progress is saved automatically on this device. You can leave
-            this page and return without re-entering your details.
+            Your progress is saved automatically on this device. You can leave,
+            reload, and return without re-entering your details.
           </div>
           <section className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
             <p className="font-bold text-blue-950">Before you begin</p>
@@ -572,12 +587,15 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
               <label className="text-sm font-semibold text-slate-700">
                 Worker Contact Number
                 <input
+                  {...philippineMobileInputProps}
                   required
                   value={form.worker_contact_number}
                   onChange={(e) =>
                     setForm((f) => ({
                       ...f,
-                      worker_contact_number: e.target.value,
+                      worker_contact_number: normalizePhilippineMobile(
+                        e.target.value,
+                      ),
                     }))
                   }
                   className={inputClass}
@@ -600,12 +618,15 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
               <label className="text-sm font-semibold text-slate-700">
                 President Contact Number
                 <input
+                  {...philippineMobileInputProps}
                   required
                   value={form.president_contact_number}
                   onChange={(e) =>
                     setForm((f) => ({
                       ...f,
-                      president_contact_number: e.target.value,
+                      president_contact_number: normalizePhilippineMobile(
+                        e.target.value,
+                      ),
                     }))
                   }
                   className={inputClass}
