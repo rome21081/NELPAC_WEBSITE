@@ -199,11 +199,15 @@ async function listMyChurchMembers() {
   return runQuery(requireSupabase().rpc("list_my_church_members"));
 }
 
-async function getMyEventRegistration(eventId) {
+async function getMyEventRegistration(
+  eventId,
+  registrationType = "Pre-Registration",
+) {
   const { data, error } = await requireSupabase()
     .from("event_registrations")
     .select("*, event_registration_delegates(*), event_registration_supplements(*)")
     .eq("event_id", eventId)
+    .eq("registration_type", registrationType)
     .maybeSingle();
   if (error) throw error;
   return data;
@@ -287,7 +291,7 @@ async function listEventRegistrations() {
     requireSupabase()
       .from("event_registrations")
       .select(
-        "*, events(title, description, event_date, venue, image_url, registration_form_config), local_churches(name, district), profiles(full_name, name, email), event_registration_delegates(*), event_registration_supplements(*)",
+        "*, events(title, description, event_date, venue, image_url, registration_form_config, onsite_registration_form_config), local_churches(name, district), profiles(full_name, name, email), event_registration_delegates(*), event_registration_supplements(*)",
       )
       .order("created_at", { ascending: false }),
   );
@@ -300,6 +304,46 @@ async function listEventRegistrationAnalytics() {
       .select("*")
       .order("event_title"),
   );
+}
+
+async function listOnsiteEventParticipants() {
+  return runQuery(
+    requireSupabase()
+      .from("onsite_event_participants")
+      .select("*, local_churches(name, district)")
+      .order("created_at", { ascending: false }),
+  );
+}
+
+async function saveOnsiteEventParticipant(participant) {
+  const client = requireSupabase();
+  if (participant.id) {
+    const { id, local_churches: _church, ...payload } = participant;
+    const { data, error } = await client
+      .from("onsite_event_participants")
+      .update(payload)
+      .eq("id", id)
+      .select("*, local_churches(name, district)")
+      .single();
+    if (error) throw error;
+    return data;
+  }
+  const { local_churches: _church, ...payload } = participant;
+  const { data, error } = await client
+    .from("onsite_event_participants")
+    .insert(payload)
+    .select("*, local_churches(name, district)")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function deleteOnsiteEventParticipant(id) {
+  const { error } = await requireSupabase()
+    .from("onsite_event_participants")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
 }
 
 async function updateEventRegistrationPayment(
@@ -779,12 +823,35 @@ async function saveReward(reward) {
   return data;
 }
 
-async function submitRewardClaim(rewardId) {
+async function submitRewardClaim(rewardId, selectedSize = null) {
   const { data, error } = await requireSupabase().rpc("submit_reward_claim", {
     p_reward_id: rewardId,
+    p_selected_size: selectedSize,
   });
   if (error) throw error;
   return data;
+}
+
+async function validateRegistrationDiscountVoucher(code, eventId, registrationType) {
+  const { data, error } = await requireSupabase().rpc(
+    "validate_registration_discount_voucher",
+    {
+      p_code: code,
+      p_event_id: eventId,
+      p_registration_type: registrationType,
+    },
+  );
+  if (error) throw error;
+  return data?.[0] || null;
+}
+
+async function listRewardMerchAllocations() {
+  return runQuery(
+    requireSupabase()
+      .from("reward_merch_allocations")
+      .select("*, local_churches(name, district), merch_preorder_forms(title)")
+      .order("created_at", { ascending: false }),
+  );
 }
 
 async function listRewardClaims() {
@@ -996,6 +1063,7 @@ export {
   listShirtVariantAnalytics,
   listMembers,
   listNotifications,
+  listOnsiteEventParticipants,
   listPointBalances,
   listPointLedger,
   listPosts,
@@ -1003,6 +1071,7 @@ export {
   listOneCardRedeemCodes,
   listRedeemCodes,
   listRewardClaims,
+  listRewardMerchAllocations,
   listRewards,
   logPasswordResetActivity,
   markNotificationRead,
@@ -1013,11 +1082,13 @@ export {
   reviewRewardClaim,
   runQuery,
   saveEvent,
+  saveOnsiteEventParticipant,
   saveMerchForm,
   saveOneCardRedeemCode,
   savePost,
   saveReward,
   setUserRole,
+  deleteOnsiteEventParticipant,
   submitEvaluation,
   submitEventRegistration,
   submitMerchPreorder,
@@ -1034,4 +1105,5 @@ export {
   updateEventPreRegistration,
   updateMerchPreorderPayment,
   updateSupplementPayment,
+  validateRegistrationDiscountVoucher,
 };

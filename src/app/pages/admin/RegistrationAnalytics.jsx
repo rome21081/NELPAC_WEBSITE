@@ -6,6 +6,7 @@ import {
   Download,
   ExternalLink,
   FileDown,
+  Gift,
   Package,
   Shirt,
   Users,
@@ -18,6 +19,8 @@ import {
   listEventRegistrations,
   listMerchPreorderAnalytics,
   listMerchPreorders,
+  listRewardClaims,
+  listRewardMerchAllocations,
   listShirtVariantAnalytics,
   updateEventRegistrationPayment,
   updateMerchPreorderPayment,
@@ -56,7 +59,7 @@ function StatCard({ icon: Icon, label, value, color = "blue" }) {
   );
 }
 
-function RegistrationAnalytics({ initialTab = "events" }) {
+function RegistrationAnalytics({ initialTab = "events", registrationType = null }) {
   const [tab, setTab] = useState(initialTab);
   const [selectedEventId, setSelectedEventId] = useState("");
   const [selectedMerchId, setSelectedMerchId] = useState("");
@@ -77,11 +80,13 @@ function RegistrationAnalytics({ initialTab = "events" }) {
         listMerchPreorderAnalytics(),
         listMerchPreorders(),
         listShirtVariantAnalytics(),
+        listRewardMerchAllocations(),
+        listRewardClaims(),
       ]),
     [],
   );
   const [eventAnalytics = [], registrations = []] = eventsData.data;
-  const [merchAnalytics = [], preorders = [], variants = []] = merchData.data;
+  const [merchAnalytics = [], preorders = [], variants = [], rewardAllocations = [], rewardClaims = []] = merchData.data;
 
   useEffect(() => {
     if (!selectedEventId && eventAnalytics[0]?.event_id)
@@ -94,17 +99,31 @@ function RegistrationAnalytics({ initialTab = "events" }) {
   }, [merchAnalytics, selectedMerchId]);
 
   const activeId = tab === "events" ? selectedEventId : selectedMerchId;
-  const selectedAnalytics =
+  const baseSelectedAnalytics =
     tab === "events"
       ? eventAnalytics.find((item) => item.event_id === selectedEventId)
       : merchAnalytics.find((item) => item.form_id === selectedMerchId);
   const visibleSubmissions = useMemo(
     () =>
       tab === "events"
-        ? registrations.filter((item) => item.event_id === selectedEventId)
-        : preorders.filter((item) => item.form_id === selectedMerchId),
-    [preorders, registrations, selectedEventId, selectedMerchId, tab],
+        ? registrations.filter((item) => item.event_id === selectedEventId && (!registrationType || (item.registration_type || "Pre-Registration") === registrationType))
+        : preorders.filter((item) => item.form_id === selectedMerchId).map((item) => ({
+            ...item,
+            reward_merch_allocations: rewardAllocations.filter((allocation) => allocation.merch_form_id === selectedMerchId && allocation.local_church_id === item.local_church_id),
+          })),
+    [preorders, registrationType, registrations, rewardAllocations, selectedEventId, selectedMerchId, tab],
   );
+  const selectedAnalytics = useMemo(() => {
+    if (tab !== "events") return baseSelectedAnalytics;
+    const submitted = visibleSubmissions.filter((item) => item.submission_status === "Submitted");
+    return {
+      ...baseSelectedAnalytics,
+      registered_churches: submitted.length,
+      total_delegates: submitted.reduce((sum, item) => sum + Number(item.total_delegate_count || 0), 0),
+      total_expected_payment: submitted.reduce((sum, item) => sum + Number(item.final_expected_total ?? item.expected_total ?? 0), 0),
+      total_submitted_payment: submitted.filter((item) => item.payment_status === "Verified").reduce((sum, item) => sum + Number(item.final_expected_total ?? item.expected_total ?? 0), 0),
+    };
+  }, [baseSelectedAnalytics, tab, visibleSubmissions]);
 
   const getPaymentDraft = (record) =>
     paymentDrafts[record.id] || {
@@ -124,7 +143,7 @@ function RegistrationAnalytics({ initialTab = "events" }) {
     const shortfall = Number(draft.shortfall || 0);
     if (
       draft.status === "Partial" &&
-      (shortfall <= 0 || shortfall >= Number(record.expected_total))
+      (shortfall <= 0 || shortfall >= Number(record.final_expected_total ?? record.expected_total))
     ) {
       setActionError(
         "Verified Partial requires an amount lacking greater than zero and below the expected total.",
@@ -289,13 +308,13 @@ function RegistrationAnalytics({ initialTab = "events" }) {
           <div>
             <span className="text-xs text-slate-400">Payment</span>
             <strong className="block text-slate-900">
-              {money(record.expected_total)}
+              {money(record.final_expected_total ?? record.expected_total)}
             </strong>
             <span className="block text-xs text-slate-500">
-              Sender: {record.payment_sender_name || "—"}
+              {parent.registration_type === "Onsite" ? "Payor" : "Sender"}: {record.payment_sender_name || "—"}
             </span>
             <span className="block text-xs text-slate-500">
-              Ref: {record.reference_number || "—"}
+              {parent.registration_type === "Onsite" ? "Officer" : "Ref"}: {record.reference_number || "—"}
             </span>
           </div>
           <div>
@@ -308,13 +327,13 @@ function RegistrationAnalytics({ initialTab = "events" }) {
           </div>
           <div>
             <span className="mb-1 block text-xs text-slate-400">Actions</span>
-            <button
+            {record.proof_of_payment_url && <button
               type="button"
               onClick={() => openProof(bucket, record.proof_of_payment_url)}
               className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-emerald-700"
             >
               <ExternalLink size={14} /> Proof
-            </button>
+            </button>}
           </div>
         </div>
       </div>
@@ -326,6 +345,7 @@ function RegistrationAnalytics({ initialTab = "events" }) {
 
   const options = tab === "events" ? eventAnalytics : merchAnalytics;
   const selectedVariants = variants.filter((item) => item.form_id === activeId);
+  const selectedDiscountClaims = rewardClaims.filter((item) => item.reward_type === "Discount" && item.discount_event_id === activeId);
 
   return (
     <div className="space-y-5 pb-24">
@@ -341,10 +361,10 @@ function RegistrationAnalytics({ initialTab = "events" }) {
         message={eventsData.error || merchData.error || actionError}
       />
 
-      <div className="inline-flex rounded-xl bg-slate-200 p-1">
+      {!registrationType && <div className="inline-flex rounded-xl bg-slate-200 p-1">
         <button type="button" onClick={() => setTab("events")} className={`rounded-lg px-4 py-2 text-sm font-bold ${tab === "events" ? "bg-white text-blue-700 shadow" : "text-slate-500"}`}>Event Registrations</button>
         <button type="button" onClick={() => setTab("merch")} className={`rounded-lg px-4 py-2 text-sm font-bold ${tab === "merch" ? "bg-white text-violet-700 shadow" : "text-slate-500"}`}>Merch Pre-Orders</button>
-      </div>
+      </div>}
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-end justify-between gap-4">
@@ -387,6 +407,7 @@ function RegistrationAnalytics({ initialTab = "events" }) {
           <div className="mt-3 flex flex-wrap gap-2">{selectedVariants.map((item, index) => <span key={`${item.color}-${item.size}-${index}`} className="rounded-full bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-800">{item.color} · {item.size}: {item.total_quantity}</span>)}</div>
         </section>
       )}
+      {tab === "events" && selectedDiscountClaims.length > 0 && <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5"><h2 className="font-extrabold text-emerald-950">Registration discount reward claims</h2><div className="mt-3 flex flex-wrap gap-2">{selectedDiscountClaims.map((claim) => <span key={claim.id} className="rounded-full bg-white px-3 py-1.5 text-xs font-bold text-emerald-800">{claim.claimant_name || "Member"} · {claim.discount_percentage}% · {claim.claim_status}</span>)}</div></section>}
 
       <div className="space-y-4">
         {visibleSubmissions.length === 0 ? (
@@ -394,15 +415,17 @@ function RegistrationAnalytics({ initialTab = "events" }) {
         ) : (
           visibleSubmissions.map((parent) => {
             const supplements = tab === "events" ? parent.event_registration_supplements || [] : parent.merch_preorder_supplements || [];
+            const claimRewards = tab === "merch" ? parent.reward_merch_allocations || [] : [];
             return (
               <article key={parent.id} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                  <div><p className="text-xs font-black uppercase tracking-wide text-slate-400">Combined Church Record</p><h2 className="text-lg font-extrabold text-slate-900">{parent.local_churches?.name}</h2><p className="text-xs text-slate-500">1 original + {supplements.length} additional submission{supplements.length === 1 ? "" : "s"}</p></div>
+                  <div><p className="text-xs font-black uppercase tracking-wide text-slate-400">Combined Church Record</p><h2 className="text-lg font-extrabold text-slate-900">{parent.local_churches?.name}</h2><p className="text-xs text-slate-500">1 original + {supplements.length} additional submission{supplements.length === 1 ? "" : "s"}{claimRewards.length ? ` + ${claimRewards.length} claim reward${claimRewards.length === 1 ? "" : "s"}` : ""}</p></div>
                   <button type="button" disabled={exportingId === parent.id} onClick={() => exportMergedPdf(tab === "events" ? "event" : "merch", parent)} className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50"><Download size={15} /> {exportingId === parent.id ? "Creating..." : "Merged PDF"}</button>
                 </header>
                 <div className="space-y-3">
                   {renderSubmission({ record: parent, index: 0, kind: tab === "events" ? "event" : "merch", parent, isOriginal: true })}
                   {supplements.map((record, index) => renderSubmission({ record, index: index + 1, kind: tab === "events" ? "event-supplement" : "merch-supplement", parent, isOriginal: false }))}
+                  {claimRewards.length > 0 && <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4"><div className="flex items-center gap-2"><Gift className="text-amber-700" size={17}/><h3 className="text-sm font-black text-amber-950">Claim Reward additions</h3></div><div className="mt-3 grid gap-2 sm:grid-cols-2">{claimRewards.map((item) => <div key={item.id} className="rounded-xl border border-amber-200 bg-white p-3 text-sm"><div className="flex items-start justify-between gap-2"><strong className="text-slate-900">{item.reward_name}</strong><span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-800">Claim Reward</span></div><p className="mt-1 text-xs text-slate-500">{item.reward_type}{item.selected_size ? ` · Size ${item.selected_size}` : ""} · Qty {item.quantity || 1}</p></div>)}</div></section>}
                 </div>
               </article>
             );

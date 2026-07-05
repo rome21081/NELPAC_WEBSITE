@@ -12,8 +12,7 @@ import { NelpacOneCardAdmin } from "./pages/admin/NelpacOneCardAdmin";
 import { EvaluationManagement } from "./pages/admin/EvaluationManagement";
 import { ImageSubmissions } from "./pages/admin/ImageSubmissions";
 import { UnifiedContentManagement } from "./pages/admin/UnifiedContentManagement";
-import { RewardsManagement } from "./pages/admin/RewardsManagement";
-import { Reports } from "./pages/admin/Reports";
+import { Delegates } from "./pages/admin/Delegates";
 import { AdminSettings } from "./pages/admin/AdminSettings";
 import { MerchPreordersManagement } from "./pages/admin/MerchPreordersManagement";
 import { RegistrationAnalytics } from "./pages/admin/RegistrationAnalytics";
@@ -85,8 +84,9 @@ const router = createBrowserRouter([
       { path: "evaluations", Component: EvaluationManagement },
       { path: "image-submissions", Component: ImageSubmissions },
       { path: "posts", Component: LegacyAdminPostsRedirect },
-      { path: "rewards", Component: RewardsManagement },
-      { path: "reports", Component: Reports },
+      { path: "rewards", element: createElement(Navigate, { to: "/admin/one-card?section=rewards", replace: true }) },
+      { path: "delegates", Component: Delegates },
+      { path: "reports", element: createElement(Navigate, { to: "/admin/delegates", replace: true }) },
       { path: "settings", Component: AdminSettings },
     ],
   },

@@ -206,7 +206,9 @@ function UserOneCard() {
                 <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
                   {code.is_used
                     ? "Used"
-                    : `Expires ${code.expires_at?.slice(0, 10)}`}
+                    : code.expires_at
+                      ? `Expires ${code.expires_at.slice(0, 10)}`
+                      : "No expiration"}
                 </span>
               </div>
             ))

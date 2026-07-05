@@ -37,6 +37,7 @@ import {
   listMyChurchMembers,
   submitEventRegistration,
   uploadPrivatePaymentProof,
+  validateRegistrationDiscountVoucher,
 } from "../../lib/supabaseServices";
 import nelpacLogo from "../../../../NELPAC-LOGO.jpg";
 
@@ -60,9 +61,10 @@ function ageFromBirthday(birthday) {
   return Math.max(age, 0);
 }
 
-function EventPreRegistration({ selectedEventId = null, onBack = null }) {
+function EventPreRegistration({ selectedEventId = null, onBack = null, registrationType = "Pre-Registration" }) {
   const { eventId: routeEventId } = useParams();
   const eventId = selectedEventId || routeEventId;
+  const onsite = registrationType === "Onsite";
   const { user, profile } = useAuth();
   const navigate = useNavigate();
   const [event, setEvent] = useState(null);
@@ -87,22 +89,26 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
     president_contact_number: "",
     male_delegate_count: 0,
     female_delegate_count: 0,
-    gcash_mode_of_payment: "GCash",
+    gcash_mode_of_payment: onsite ? "Cash" : "GCash",
     payment_sender_name: "",
     payment_date: "",
     reference_number: "",
+    voucher_code: "",
     custom_field_responses: {},
   });
   const [delegates, setDelegates] = useState([]);
   const [expandedDelegate, setExpandedDelegate] = useState(null);
-  const draftKey = `nelpac:event-registration-draft:${user.id}:${eventId}`;
+  const [voucher, setVoucher] = useState(null);
+  const [voucherMessage, setVoucherMessage] = useState("");
+  const [validatingVoucher, setValidatingVoucher] = useState(false);
+  const draftKey = `nelpac:event-registration-draft:${registrationType}:${user.id}:${eventId}`;
 
   useEffect(() => {
     Promise.all([
       getEvent(eventId),
       listLocalChurches({ activeOnly: true }),
       listMyChurchMembers(),
-      getMyEventRegistration(eventId),
+      getMyEventRegistration(eventId, registrationType),
       getMyMembers(user.id),
     ])
       .then(async ([eventData, churchData, memberData, registration, ownMembers]) => {
@@ -133,13 +139,15 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
             male_delegate_count: registration.male_delegate_count,
             female_delegate_count: registration.female_delegate_count,
             gcash_mode_of_payment:
-              registration.gcash_mode_of_payment || "GCash",
+              registration.gcash_mode_of_payment || (onsite ? "Cash" : "GCash"),
             payment_sender_name: registration.payment_sender_name || "",
             payment_date: registration.payment_date || "",
             reference_number: registration.reference_number || "",
+            voucher_code: registration.voucher_code || "",
             custom_field_responses:
               registration.custom_field_responses || {},
           });
+          if (registration.voucher_discount_percentage) setVoucher({ code: registration.voucher_code, discount_percentage: registration.voucher_discount_percentage });
           setDelegates(
             (registration.event_registration_delegates || []).sort(
               (a, b) => a.row_number - b.row_number,
@@ -178,7 +186,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
         setDraftReady(true);
         setLoading(false);
       });
-  }, [draftKey, eventId, user.id]);
+  }, [draftKey, eventId, onsite, registrationType, user.id]);
 
   useEffect(() => {
     if (!draftReady || loading || success) return undefined;
@@ -217,6 +225,8 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
   ).length;
   const totalDelegates = delegates.length;
   const totalPayment = totalDelegates * Number(event?.registration_fee || 0);
+  const voucherDiscount = voucher ? Number(event?.registration_fee || 0) * Number(voucher.discount_percentage || 0) / 100 : 0;
+  const finalPayment = Math.max(totalPayment - voucherDiscount, 0);
   const churchMembers = useMemo(
     () =>
       form.local_church_id
@@ -238,6 +248,24 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
   const addDelegate = () => {
     setExpandedDelegate(delegates.length);
     setDelegates((current) => [...current, emptyDelegate()]);
+  };
+
+  const applyVoucher = async () => {
+    const code = form.voucher_code?.trim();
+    setVoucherMessage("");
+    setVoucher(null);
+    if (!code) return setVoucherMessage("Enter a voucher code.");
+    setValidatingVoucher(true);
+    try {
+      const result = await validateRegistrationDiscountVoucher(code, eventId, registrationType);
+      setVoucher(result);
+      setForm((current) => ({ ...current, voucher_code: result.code }));
+      setVoucherMessage("Voucher applied successfully.");
+    } catch (err) {
+      setVoucherMessage((err.message || "").includes("VOUCHER_ALREADY_USED") ? "Voucher Already Used" : "Invalid Voucher");
+    } finally {
+      setValidatingVoucher(false);
+    }
   };
 
   const removeDelegate = (index) => {
@@ -320,9 +348,11 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
       delegates.some((delegate) => !delegate.name.trim() || delegate.age === "")
     )
       return setError("Complete every delegate row before submitting.");
-    const selectedProofFile =
-      proofFile || proofInputRef.current?.files?.[0] || null;
+    const selectedProofFile = onsite
+      ? null
+      : proofFile || proofInputRef.current?.files?.[0] || null;
     if (
+      !onsite &&
       !selectedProofFile &&
       (addingAnother || !existing?.proof_of_payment_url)
     )
@@ -331,7 +361,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
       );
     setSaving(true);
     try {
-      const proofPath = selectedProofFile
+      const proofPath = !onsite && selectedProofFile
         ? await uploadPrivatePaymentProof(
             "registration-payment-proofs",
             selectedProofFile,
@@ -360,11 +390,11 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
           male_delegate_count: maleDelegateCount,
           female_delegate_count: femaleDelegateCount,
           fee_per_delegate: Number(event.registration_fee),
-          gcash_mode_of_payment: form.gcash_mode_of_payment,
+          gcash_mode_of_payment: onsite ? "Cash" : form.gcash_mode_of_payment,
           payment_sender_name: form.payment_sender_name,
           payment_date: form.payment_date || null,
           reference_number: form.reference_number || null,
-          proof_of_payment_url: proofPath,
+          proof_of_payment_url: onsite ? null : proofPath,
           custom_field_responses: form.custom_field_responses || {},
         });
       } else {
@@ -372,13 +402,15 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
           registration: {
             ...(existing?.id ? { id: existing.id } : {}),
             event_id: eventId,
+            registration_type: registrationType,
             submitted_by: user.id,
             ...form,
+            gcash_mode_of_payment: onsite ? "Cash" : form.gcash_mode_of_payment,
             male_delegate_count: maleDelegateCount,
             female_delegate_count: femaleDelegateCount,
             payment_date: form.payment_date || null,
             reference_number: form.reference_number || null,
-            proof_of_payment_url: proofPath,
+            proof_of_payment_url: onsite ? null : proofPath,
             amount_paid: 0,
           },
           delegates,
@@ -394,14 +426,21 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
     }
   };
 
-  if (loading) return <LoadingState label="Loading pre-registration form..." />;
+  if (loading) return <LoadingState label={`Loading ${onsite ? "onsite registration" : "pre-registration"} form...`} />;
   if (!event) return <ErrorState message={error || "Event not found."} />;
-  if ((success || existing?.submission_status === "Submitted") && !addingAnother)
+  const localDate = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+  const registrationOpen = onsite
+    ? event.status === "Published" && event.onsite_registration_enabled && (event.onsite_registration_mode === "Manual" || localDate >= event.event_date)
+    : event.status === "Published" && event.pre_registration_enabled;
+  const formConfig = onsite
+    ? event.onsite_registration_form_config
+    : event.registration_form_config;
+  if ((success || existing?.submission_status === "Submitted") && !addingAnother && registrationOpen)
     return (
       <div className="mx-auto max-w-2xl rounded-3xl border border-emerald-200 bg-white p-8 text-center shadow-sm">
         <CheckCircle2 className="mx-auto text-emerald-500" size={52} />
         <h1 className="mt-4 text-2xl font-extrabold text-slate-900">
-          Registration submitted
+          {onsite ? "Onsite registration" : "Registration"} submitted
         </h1>
         <p className="mt-2 text-slate-500">
           Your church registration for {event.title} is safely recorded. The
@@ -425,8 +464,11 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
               payment_sender_name: "",
               payment_date: "",
               reference_number: "",
+              voucher_code: "",
               custom_field_responses: {},
             }));
+            setVoucher(null);
+            setVoucherMessage("");
           }}
           className="mt-6 inline-flex rounded-xl bg-emerald-700 px-5 py-3 text-sm font-bold text-white"
         >
@@ -441,7 +483,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
           </button>
         ) : (
           <Link
-            to="/user/forms?type=registration"
+            to={`/user/forms?type=${onsite ? "onsite" : "registration"}`}
             className="mt-6 inline-flex rounded-xl bg-blue-700 px-5 py-3 text-sm font-bold text-white"
           >
             Back to forms
@@ -450,8 +492,6 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
       </div>
     );
 
-  const registrationOpen =
-    event.status === "Published" && event.pre_registration_enabled;
   return (
     <div className="mx-auto max-w-5xl pb-10">
       {onBack ? (
@@ -464,7 +504,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
         </button>
       ) : (
         <Link
-          to="/user/forms?type=registration"
+          to={`/user/forms?type=${onsite ? "onsite" : "registration"}`}
           className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-blue-700"
         >
           <ArrowLeft size={16} /> Form selection
@@ -487,7 +527,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
             />
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-200">
-                NELPAC Event Pre-Registration
+                NELPAC Event {onsite ? "Onsite Registration" : "Pre-Registration"}
               </p>
               <h1 className="mt-1 text-2xl font-black sm:text-3xl">
                 {event.title}
@@ -510,7 +550,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
 
       {!registrationOpen ? (
         <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-800">
-          Pre-registration is not currently open for this event.
+          {onsite ? "Onsite registration" : "Pre-registration"} is not currently open for this event.
         </div>
       ) : (
         <form onSubmit={submit} className="mt-5 space-y-5">
@@ -521,16 +561,16 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
           <section className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
             <p className="font-bold text-blue-950">Before you begin</p>
             <p className="mt-1 text-sm leading-6 text-blue-800">
-              {event.registration_guide}
+              {onsite ? event.onsite_registration_guide : event.registration_guide}
             </p>
-            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
+            {!onsite && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
               <strong className="block">Important Notice</strong>
               <p className="mt-1">
                 Receipts must remain authentic and unaltered. Any tampering or
                 falsification of payment proof is strictly prohibited and may
                 subject the responsible party to legal action.
               </p>
-            </div>
+            </div>}
           </section>
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
             <div className="mb-5 flex items-center gap-3">
@@ -539,7 +579,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
               </div>
               <div>
                 <h2 className="font-extrabold text-slate-900">
-                  {event.registration_form_config?.section_one_title ||
+                  {formConfig?.section_one_title ||
                     "Church and delegate information"}
                 </h2>
                 <p className="text-xs text-slate-500">
@@ -847,7 +887,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
           </section>
 
           <CustomFormSections
-            sections={event.registration_form_config?.custom_sections || []}
+            sections={formConfig?.custom_sections || []}
             values={form.custom_field_responses}
             onChange={(fieldId, value) =>
               setForm((current) => ({
@@ -860,7 +900,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
             }
           />
 
-          {(event.registration_gcash_recipient_name ||
+          {!onsite && (event.registration_gcash_recipient_name ||
             event.registration_gcash_number) && (
             <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm sm:p-7">
               <p className="text-xs font-black uppercase tracking-wide text-emerald-700">
@@ -899,10 +939,11 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
                 />
               </label>
               <label className="text-sm font-semibold text-slate-700">
-                GCash Mode of Payment
+                {onsite ? "Mode of Payment: Cash" : "GCash Mode of Payment"}
                 <input
                   required
-                  value={form.gcash_mode_of_payment}
+                  readOnly={onsite}
+                  value={onsite ? "Cash" : form.gcash_mode_of_payment}
                   onChange={(e) =>
                     setForm((f) => ({
                       ...f,
@@ -941,7 +982,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
                 />
               </label>
               <label className="text-sm font-semibold text-slate-700">
-                Reference Number
+                {onsite ? "Name of the Officer Recipient" : "Reference Number"}
                 <input
                   required
                   value={form.reference_number}
@@ -951,7 +992,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
                   className={inputClass}
                 />
               </label>
-              <div className="sm:col-span-2">
+              {!onsite && <div className="sm:col-span-2">
                 <p className="text-sm font-semibold text-slate-700">
                   Proof of Payment
                 </p>
@@ -989,13 +1030,12 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
                     </button>
                   </div>
                 )}
-              </div>
+              </div>}
             </div>
-            <div className="mt-5 flex items-center justify-between rounded-2xl bg-emerald-50 p-4 text-emerald-900">
-              <span className="font-semibold">Total Payment</span>
-              <strong className="text-2xl">
-                ₱{totalPayment.toLocaleString()}
-              </strong>
+            {!addingAnother && <div className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 p-4"><p className="text-sm font-black text-blue-950">Discount voucher</p><p className="mt-1 text-xs text-blue-700">Use an approved One Card discount voucher for this event and registration type.</p><div className="mt-3 flex gap-2"><input value={form.voucher_code || ""} onChange={(e) => { setForm((current) => ({ ...current, voucher_code: e.target.value.toUpperCase() })); setVoucher(null); setVoucherMessage(""); }} placeholder="Enter voucher code" className="min-w-0 flex-1 rounded-xl border border-blue-200 px-3 py-2.5 font-mono uppercase"/><button type="button" onClick={applyVoucher} disabled={validatingVoucher} className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">{validatingVoucher ? "Checking…" : "Apply"}</button></div>{voucherMessage && <p className={`mt-2 text-sm font-bold ${voucher ? "text-emerald-700" : "text-red-700"}`}>{voucherMessage}</p>}</div>}
+            <div className="mt-5 space-y-2 rounded-2xl bg-emerald-50 p-4 text-emerald-900">
+              {voucher && <><div className="flex justify-between text-sm"><span>Original total payment</span><strong>₱{totalPayment.toLocaleString()}</strong></div><div className="flex justify-between text-sm"><span>Voucher discount ({voucher.discount_percentage}% of one delegate fee)</span><strong>-₱{voucherDiscount.toLocaleString()}</strong></div></>}
+              <div className="flex items-center justify-between border-t border-emerald-200 pt-2"><span className="font-semibold">Final Total Payment</span><strong className="text-2xl">₱{(voucher ? finalPayment : totalPayment).toLocaleString()}</strong></div>
             </div>
           </section>
           <ErrorState message={error} />
@@ -1003,7 +1043,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null }) {
             disabled={saving}
             className="w-full rounded-2xl bg-blue-700 px-6 py-4 text-sm font-extrabold text-white shadow-lg shadow-blue-200 hover:bg-blue-800 disabled:opacity-60"
           >
-            {saving ? "Submitting registration..." : "Submit Pre-Registration"}
+            {saving ? "Submitting registration..." : `Submit ${onsite ? "Onsite Registration" : "Pre-Registration"}`}
           </button>
         </form>
       )}

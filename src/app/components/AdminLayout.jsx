@@ -7,13 +7,12 @@ import {
   Calendar,
   ClipboardList,
   Image,
-  Gift,
   Settings,
   LogOut,
   ChevronDown,
   Menu,
   X,
-  Building2,
+  UserRoundCheck,
   Shield,
   FileCheck2,
 } from "lucide-react";
@@ -39,8 +38,7 @@ const navItems = [
   { icon: FileCheck2, label: "Forms Center", path: "/admin/forms" },
   { icon: ClipboardList, label: "Evaluations", path: "/admin/evaluations" },
   { icon: Image, label: "Image Submissions", path: "/admin/image-submissions" },
-  { icon: Gift, label: "Rewards", path: "/admin/rewards" },
-  { icon: Building2, label: "Reports & Analytics", path: "/admin/reports" },
+  { icon: UserRoundCheck, label: "Delegates", path: "/admin/delegates" },
   { icon: Shield, label: "Settings", path: "/admin/settings" },
 ];
 function AdminLayout() {

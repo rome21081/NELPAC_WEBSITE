@@ -3,19 +3,21 @@ import { Edit2, Package, Plus, X } from "lucide-react";
 import { EmptyState, ErrorState, LoadingState } from "../../components/DataState";
 import { useAuth } from "../../lib/authContext";
 import { useSupabaseData } from "../../lib/useSupabaseData";
-import { listRewards, saveReward, uploadStorageImage } from "../../lib/supabaseServices";
+import { listEvents, listMerchForms, listRewards, saveReward, uploadStorageImage } from "../../lib/supabaseServices";
 
-const emptyForm = { name: "", description: "", required_points: "", stock_quantity: 0, image_url: "", is_active: true };
+const sizes = ["XS", "S", "M", "L", "XL", "XXL"];
+const emptyForm = { name: "", description: "", reward_type: "Others", custom_type: "", merch_form_id: "", available_sizes: [], discount_percentage: 10, discount_event_id: "", discount_registration_types: ["Pre-Registration"], required_points: "", stock_quantity: 0, image_url: "", is_active: true };
 
 function RewardsManagement() {
   const { profile } = useAuth();
-  const { data: rewards, loading, error, reload } = useSupabaseData(() => listRewards(), []);
+  const { data, loading, error, reload } = useSupabaseData(() => Promise.all([listRewards(), listMerchForms(), listEvents()]), []);
   const [form, setForm] = useState(emptyForm);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [rewards = [], merchForms = [], events = []] = data;
 
   const resetForm = () => {
     setForm(emptyForm);
@@ -38,6 +40,13 @@ function RewardsManagement() {
       stock_quantity: reward.stock_quantity ?? 0,
       image_url: reward.image_url || "",
       is_active: reward.is_active !== false,
+      reward_type: reward.reward_type || "Others",
+      custom_type: reward.custom_type || "",
+      merch_form_id: reward.merch_form_id || "",
+      available_sizes: reward.available_sizes || [],
+      discount_percentage: reward.discount_percentage || 10,
+      discount_event_id: reward.discount_event_id || "",
+      discount_registration_types: reward.discount_registration_types || [],
       created_by: reward.created_by || profile.id,
     });
     setImageFile(null);
@@ -56,6 +65,12 @@ function RewardsManagement() {
         required_points: Number(form.required_points),
         stock_quantity: Number(form.stock_quantity),
         created_by: form.created_by || profile.id,
+        custom_type: form.reward_type === "Others" ? form.custom_type || null : null,
+        merch_form_id: ["Shirt", "ID Lace"].includes(form.reward_type) ? form.merch_form_id || null : null,
+        available_sizes: form.reward_type === "Shirt" ? form.available_sizes : [],
+        discount_percentage: form.reward_type === "Discount" ? Number(form.discount_percentage) : null,
+        discount_event_id: form.reward_type === "Discount" ? form.discount_event_id || null : null,
+        discount_registration_types: form.reward_type === "Discount" ? form.discount_registration_types : [],
       });
       const wasEditing = Boolean(form.id);
       resetForm();
@@ -71,6 +86,8 @@ function RewardsManagement() {
 
   const submit = (event) => {
     event.preventDefault();
+    if (form.reward_type === "Shirt" && !form.available_sizes.length) return setMessage("Unable to save: select at least one shirt size.");
+    if (form.reward_type === "Discount" && (!form.discount_event_id || !form.discount_registration_types.length)) return setMessage("Unable to save: select an event and at least one registration type.");
     setConfirmOpen(true);
   };
 
@@ -80,23 +97,28 @@ function RewardsManagement() {
     <ErrorState message={error || (message.includes("Unable") ? message : "")} />
     {message && !message.includes("Unable") && <p className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-700">{message}</p>}
     <form onSubmit={submit} className="bg-white rounded-2xl p-5 border border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-3">
+      <select className="border rounded-xl px-3 py-2 text-sm" value={form.reward_type} onChange={(e) => setForm((f) => ({ ...f, reward_type: e.target.value }))}><option>Shirt</option><option>ID Lace</option><option>Discount</option><option>Others</option></select>
       <input required className="border rounded-xl px-3 py-2 text-sm" placeholder="Reward name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
       <input required type="number" min="1" className="border rounded-xl px-3 py-2 text-sm" placeholder="Required points" value={form.required_points} onChange={(e) => setForm((f) => ({ ...f, required_points: e.target.value }))} />
       <input required type="number" min="0" className="border rounded-xl px-3 py-2 text-sm" placeholder="Stock" value={form.stock_quantity} onChange={(e) => setForm((f) => ({ ...f, stock_quantity: e.target.value }))} />
+      {form.reward_type === "Others" && <input required className="border rounded-xl px-3 py-2 text-sm md:col-span-3" placeholder="Specify reward type" value={form.custom_type} onChange={(e) => setForm((f) => ({ ...f, custom_type: e.target.value }))} />}
+      {["Shirt", "ID Lace"].includes(form.reward_type) && <label className="text-sm font-bold text-slate-700 md:col-span-3">Connect to Merch Pre-Order (optional)<select value={form.merch_form_id} onChange={(e) => { const selected = merchForms.find((item) => item.id === e.target.value); setForm((f) => ({ ...f, merch_form_id: e.target.value, name: selected?.title || f.name })); }} className="mt-1 w-full rounded-xl border px-3 py-2 font-normal"><option value="">Manual reward</option>{merchForms.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>}
+      {form.reward_type === "Shirt" && <div className="md:col-span-3 rounded-2xl border border-slate-200 p-4"><p className="text-sm font-bold text-slate-700">Available sizes</p><div className="mt-3 flex flex-wrap gap-2">{sizes.map((size) => <label key={size} className={`cursor-pointer rounded-xl border px-3 py-2 text-sm font-bold ${form.available_sizes.includes(size) ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-500"}`}><input type="checkbox" className="sr-only" checked={form.available_sizes.includes(size)} onChange={() => setForm((f) => ({ ...f, available_sizes: f.available_sizes.includes(size) ? f.available_sizes.filter((item) => item !== size) : [...f.available_sizes, size] }))} />{size}</label>)}</div></div>}
+      {form.reward_type === "Discount" && <div className="grid gap-3 md:col-span-3 md:grid-cols-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><label className="text-sm font-bold text-slate-700">Discount percentage<select value={form.discount_percentage} onChange={(e) => setForm((f) => ({ ...f, discount_percentage: e.target.value }))} className="mt-1 w-full rounded-xl border px-3 py-2 font-normal">{Array.from({ length: 10 }, (_, index) => (index + 1) * 10).map((value) => <option key={value} value={value}>{value}%</option>)}</select></label><label className="text-sm font-bold text-slate-700">Applicable event<select required value={form.discount_event_id} onChange={(e) => setForm((f) => ({ ...f, discount_event_id: e.target.value }))} className="mt-1 w-full rounded-xl border px-3 py-2 font-normal"><option value="">Select event</option>{events.map((event) => <option key={event.id} value={event.id}>{event.title}</option>)}</select></label><div className="md:col-span-2 flex flex-wrap gap-3">{["Pre-Registration", "Onsite"].map((type) => <label key={type} className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={form.discount_registration_types.includes(type)} onChange={() => setForm((f) => ({ ...f, discount_registration_types: f.discount_registration_types.includes(type) ? f.discount_registration_types.filter((item) => item !== type) : [...f.discount_registration_types, type] }))} /> {type === "Onsite" ? "Onsite Registration" : type}</label>)}</div></div>}
       <label className="md:col-span-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
         <span className="block mb-2" style={{ fontWeight: 700 }}>Merch / reward image</span>
         <input type="file" accept="image/*" className="block w-full file:mr-4 file:rounded-xl file:border-0 file:bg-blue-700 file:px-4 file:py-2 file:text-sm file:text-white" onChange={(e) => chooseImage(e.target.files?.[0] || null)} />
         {imagePreview && <img src={imagePreview} alt="Reward preview" className="mt-3 max-h-72 w-full rounded-xl object-contain bg-slate-100" />}
       </label>
       <input className="border rounded-xl px-3 py-2 text-sm md:col-span-2" placeholder="Description" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
-      <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={form.is_active} onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))} /> Active</label>
+      <label className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-600">Active / Claimable<input type="checkbox" checked={form.is_active} onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))} /></label>
       {form.id && <button type="button" onClick={resetForm} className="flex justify-center items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm"><X style={{ width: 14, height: 14 }} /> Cancel Edit</button>}
       <button disabled={saving} className="flex justify-center items-center gap-2 rounded-xl bg-blue-700 px-3 py-2 text-white text-sm disabled:opacity-60"><Plus style={{ width: 14, height: 14 }} /> {saving ? "Saving..." : form.id ? "Update Reward" : "Save Reward"}</button>
     </form>
     {rewards.length === 0 ? <EmptyState label="No rewards yet." /> : <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
       {rewards.map((reward) => <div key={reward.id} className="bg-white rounded-2xl p-5 border border-slate-100">
         {reward.image_url ? <img src={reward.image_url} alt={reward.name} className="mb-3 max-h-56 w-full rounded-xl object-contain bg-slate-100" /> : <Package className="text-blue-700 mb-3" />}
-        <h2 className="text-slate-900" style={{ fontWeight: 700 }}>{reward.name}</h2>
+        <p className="text-xs font-black uppercase tracking-wide text-blue-600">{reward.reward_type || "Reward"}</p><h2 className="text-slate-900" style={{ fontWeight: 700 }}>{reward.name}</h2>
         <p className="text-slate-500 text-sm">{reward.description || "No description"}</p>
         <div className="flex justify-between mt-4 text-sm"><span>{reward.required_points} pts</span><span>{reward.stock_quantity} stock</span><span>{reward.is_active ? "Active" : "Inactive"}</span></div>
         <button onClick={() => editReward(reward)} className="mt-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm"><Edit2 style={{ width: 14, height: 14 }} /> Edit</button>

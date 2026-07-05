@@ -16,6 +16,8 @@ const realtimeTables = [
   "rewards",
   "reward_claims",
   "redeem_codes",
+  "registration_discount_vouchers",
+  "reward_merch_allocations",
   "notifications",
   "event_registrations",
   "event_registration_delegates",

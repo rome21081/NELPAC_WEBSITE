@@ -268,6 +268,27 @@ const merchItemsTable = (doc, form, items, totalQuantity, y) => {
   return doc.lastAutoTable.finalY + 7;
 };
 
+const rewardAllocationsTable = (doc, allocations, y) => {
+  if (!allocations?.length) return y;
+  y = sectionTitle(doc, "Claim Reward Additions", y);
+  autoTable(doc, {
+    startY: y,
+    head: [["Reward Name", "Type", "Size", "Quantity", "Source"]],
+    body: allocations.map((item) => [
+      text(item.reward_name),
+      text(item.reward_type),
+      text(item.selected_size, "N/A"),
+      text(item.quantity, "1"),
+      text(item.source, "Claim Reward"),
+    ]),
+    theme: "grid",
+    margin: { left: MARGIN, right: MARGIN, bottom: 20 },
+    headStyles: { fillColor: [254, 243, 199], textColor: [120, 53, 15], fontStyle: "bold" },
+    styles: { font: "helvetica", fontSize: 8.5, cellPadding: 2.5, lineColor: [252, 211, 77], lineWidth: 0.2 },
+  });
+  return doc.lastAutoTable.finalY + 7;
+};
+
 const customResponseRows = (sections = [], responses = {}) => {
   const answers = sections.flatMap((section, sectionIndex) =>
     (section.fields || []).map((field, fieldIndex) => ({
@@ -387,6 +408,10 @@ const createDocument = () =>
 
 async function downloadPreRegistrationPdf(registration) {
   const event = registration.events || {};
+  const onsite = registration.registration_type === "Onsite";
+  const registrationConfig = onsite
+    ? event.onsite_registration_form_config
+    : event.registration_form_config;
   const church = registration.local_churches || {};
   const delegates = [...(registration.event_registration_delegates || [])].sort(
     (a, b) => Number(a.row_number) - Number(b.row_number),
@@ -424,7 +449,7 @@ async function downloadPreRegistrationPdf(registration) {
         "Total Delegates",
         text(registration.total_delegate_count, "0"),
         "Total Payment",
-        amount(registration.expected_total),
+        amount(registration.final_expected_total ?? registration.expected_total),
       ],
     ],
     y,
@@ -469,7 +494,7 @@ async function downloadPreRegistrationPdf(registration) {
   y = doc.lastAutoTable.finalY + 7;
 
   const registrationResponseRows = customResponseRows(
-    event.registration_form_config?.custom_sections,
+    registrationConfig?.custom_sections,
     registration.custom_field_responses,
   );
   if (registrationResponseRows.length) {
@@ -506,7 +531,7 @@ async function downloadPreRegistrationPdf(registration) {
     y = doc.lastAutoTable.finalY + 7;
 
     const supplementResponseRows = customResponseRows(
-      event.registration_form_config?.custom_sections,
+      registrationConfig?.custom_sections,
       supplement.custom_field_responses,
     );
     if (supplementResponseRows.length) {
@@ -516,10 +541,11 @@ async function downloadPreRegistrationPdf(registration) {
   }
 
   const paymentRows = (record) => [
-    ["Payment Date", formatDate(record.payment_date), "Reference Number", text(record.reference_number)],
-    ["Payment Sender", text(record.payment_sender_name), "Submission Status", text(record.submission_status, "Submitted")],
-    ["Expected Amount", amount(record.expected_total), "Amount Paid", amount(record.amount_paid)],
-    ["Payment Status", paymentStatusLabel(record.payment_status), "GCash Mode", text(record.gcash_mode_of_payment)],
+    ["Payment Date", formatDate(record.payment_date), onsite ? "Officer Recipient" : "Reference Number", text(record.reference_number)],
+    [onsite ? "Name of Payor" : "Payment Sender", text(record.payment_sender_name), "Submission Status", text(record.submission_status, "Submitted")],
+    ["Expected Amount", amount(record.final_expected_total ?? record.expected_total), "Amount Paid", amount(record.amount_paid)],
+    ...(record.voucher_code ? [["Voucher Code", text(record.voucher_code), "Discount", amount(record.voucher_discount_amount)]] : []),
+    ["Payment Status", paymentStatusLabel(record.payment_status), "Mode of Payment", text(record.gcash_mode_of_payment)],
     ...(record.payment_status === "Partial"
       ? [["Amount Lacking", amount(record.payment_shortfall), "", ""]]
       : []),
@@ -534,7 +560,7 @@ async function downloadPreRegistrationPdf(registration) {
   }
 
   const registrationExpected =
-    Number(registration.expected_total || 0) +
+    Number(registration.final_expected_total ?? registration.expected_total ?? 0) +
     registrationSupplements.reduce(
       (sum, row) => sum + Number(row.expected_total || 0),
       0,
@@ -554,7 +580,7 @@ async function downloadPreRegistrationPdf(registration) {
 
   addFooters(doc, registration);
   doc.save(
-    `Pre-Registration_${safeFilenamePart(event.title, "Event")}_${safeFilenamePart(church.name, "LocalChurch")}.pdf`,
+    `${onsite ? "Onsite-Registration" : "Pre-Registration"}_${safeFilenamePart(event.title, "Event")}_${safeFilenamePart(church.name, "LocalChurch")}.pdf`,
   );
 }
 
@@ -672,6 +698,12 @@ async function downloadMerchPreorderPdf(preorder) {
     }
   }
 
+  y = rewardAllocationsTable(
+    doc,
+    preorder.reward_merch_allocations || [],
+    y,
+  );
+
   const paymentRows = (record) => [
     ["Payment Date", formatDate(record.payment_date), "Reference Number", text(record.reference_number)],
     ["Payment Sender", text(record.payment_sender_name), "Submission Status", text(record.submission_status, "Submitted")],
@@ -721,6 +753,10 @@ async function downloadAllPreRegistrationsPdf(registrations, eventTitle) {
 
   for (let churchIndex = 0; churchIndex < registrations.length; churchIndex += 1) {
     const registration = registrations[churchIndex];
+    const onsite = registration.registration_type === "Onsite";
+    const registrationConfig = onsite
+      ? event.onsite_registration_form_config
+      : event.registration_form_config;
     if (churchIndex > 0) doc.addPage();
     y = await documentHeader(
       doc,
@@ -733,7 +769,7 @@ async function downloadAllPreRegistrationsPdf(registrations, eventTitle) {
       .sort((a, b) => new Date(a.submitted_at) - new Date(b.submitted_at));
     const records = [registration, ...supplements];
     const expected = records.reduce(
-      (sum, record) => sum + Number(record.expected_total || 0),
+      (sum, record) => sum + Number(record.final_expected_total ?? record.expected_total ?? 0),
       0,
     );
     const paid = records.reduce(
@@ -748,7 +784,7 @@ async function downloadAllPreRegistrationsPdf(registrations, eventTitle) {
         ["Local Church Worker", text(registration.local_church_worker), "Worker Contact", text(registration.worker_contact_number)],
         ["Church President", text(registration.local_church_president), "President Contact", text(registration.president_contact_number)],
         ["Male Delegates", text(registration.male_delegate_count, "0"), "Female Delegates", text(registration.female_delegate_count, "0")],
-        ["Total Delegates", text(registration.total_delegate_count, "0"), "Total Payment", amount(registration.expected_total)],
+        ["Total Delegates", text(registration.total_delegate_count, "0"), "Total Payment", amount(registration.final_expected_total ?? registration.expected_total)],
       ],
       y,
     );
@@ -776,7 +812,7 @@ async function downloadAllPreRegistrationsPdf(registrations, eventTitle) {
     y = doc.lastAutoTable.finalY + 7;
 
     const registrationResponseRows = customResponseRows(
-      event.registration_form_config?.custom_sections,
+      registrationConfig?.custom_sections,
       registration.custom_field_responses,
     );
     if (registrationResponseRows.length) {
@@ -801,7 +837,7 @@ async function downloadAllPreRegistrationsPdf(registrations, eventTitle) {
       y = doc.lastAutoTable.finalY + 7;
 
       const supplementResponseRows = customResponseRows(
-        event.registration_form_config?.custom_sections,
+        registrationConfig?.custom_sections,
         supplement.custom_field_responses,
       );
       if (supplementResponseRows.length) {
@@ -813,10 +849,11 @@ async function downloadAllPreRegistrationsPdf(registrations, eventTitle) {
     records.forEach((record, index) => {
       y = sectionTitle(doc, index === 0 ? "Section 3: Payment Details" : "Additional Payment", y);
       y = detailsTable(doc, [
-        ["Payment Date", formatDate(record.payment_date), "Reference Number", text(record.reference_number)],
-        ["Payment Sender", text(record.payment_sender_name), "Submission Status", text(record.submission_status, "Submitted")],
-        ["Expected Amount", amount(record.expected_total), "Amount Paid", amount(record.amount_paid)],
-        ["Payment Status", paymentStatusLabel(record.payment_status), "GCash Mode", text(record.gcash_mode_of_payment)],
+        ["Payment Date", formatDate(record.payment_date), onsite ? "Officer Recipient" : "Reference Number", text(record.reference_number)],
+        [onsite ? "Name of Payor" : "Payment Sender", text(record.payment_sender_name), "Submission Status", text(record.submission_status, "Submitted")],
+        ["Expected Amount", amount(record.final_expected_total ?? record.expected_total), "Amount Paid", amount(record.amount_paid)],
+        ...(record.voucher_code ? [["Voucher Code", text(record.voucher_code), "Discount", amount(record.voucher_discount_amount)]] : []),
+        ["Payment Status", paymentStatusLabel(record.payment_status), "Mode of Payment", text(record.gcash_mode_of_payment)],
         ...(record.payment_status === "Partial" ? [["Amount Lacking", amount(record.payment_shortfall), "", ""]] : []),
       ], y);
     });
@@ -829,7 +866,8 @@ async function downloadAllPreRegistrationsPdf(registrations, eventTitle) {
   }
 
   addFooters(doc, { id: `overall-event-${Date.now()}` });
-  doc.save(`Overall_Pre-Registration_${safeFilenamePart(eventTitle, "Event")}.pdf`);
+  const onsite = registrations[0]?.registration_type === "Onsite";
+  doc.save(`Overall_${onsite ? "Onsite-Registration" : "Pre-Registration"}_${safeFilenamePart(eventTitle, "Event")}.pdf`);
 }
 
 async function downloadAllMerchPreordersPdf(preorders, formTitle) {
@@ -905,6 +943,12 @@ async function downloadAllMerchPreordersPdf(preorders, formTitle) {
         y = detailsTable(doc, responseRows, y);
       }
     });
+
+    y = rewardAllocationsTable(
+      doc,
+      preorder.reward_merch_allocations || [],
+      y,
+    );
 
     records.forEach((record, index) => {
       y = sectionTitle(
