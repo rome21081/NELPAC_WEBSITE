@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Edit2, Package, Plus, X } from "lucide-react";
+import { Archive, Edit2, Package, Plus, RotateCcw, X } from "lucide-react";
 import { EmptyState, ErrorState, LoadingState } from "../../components/DataState";
 import { useAuth } from "../../lib/authContext";
 import { useSupabaseData } from "../../lib/useSupabaseData";
@@ -17,7 +17,12 @@ function RewardsManagement() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [rewardView, setRewardView] = useState("active");
+  const [archivingId, setArchivingId] = useState("");
   const [rewards = [], merchForms = [], events = []] = data;
+  const activeRewards = rewards.filter((reward) => reward.is_active !== false);
+  const archivedRewards = rewards.filter((reward) => reward.is_active === false);
+  const visibleRewards = rewardView === "archived" ? archivedRewards : activeRewards;
 
   const resetForm = () => {
     setForm(emptyForm);
@@ -91,6 +96,21 @@ function RewardsManagement() {
     setConfirmOpen(true);
   };
 
+  const toggleArchive = async (reward) => {
+    const willArchive = reward.is_active !== false;
+    setArchivingId(reward.id);
+    setMessage("");
+    try {
+      await saveReward({ ...reward, is_active: !willArchive });
+      await reload();
+      setMessage(willArchive ? `${reward.name} archived and hidden from the active catalog.` : `${reward.name} restored to the active catalog.`);
+    } catch (err) {
+      setMessage(err.message || `Unable to ${willArchive ? "archive" : "restore"} reward.`);
+    } finally {
+      setArchivingId("");
+    }
+  };
+
   if (loading) return <LoadingState label="Loading rewards..." />;
   return <div className="space-y-5">
     <div><h1 className="text-slate-900" style={{ fontSize: "22px", fontWeight: 700 }}>Rewards Management</h1><p className="text-slate-500 text-sm">Manage redeemable rewards</p></div>
@@ -115,13 +135,23 @@ function RewardsManagement() {
       {form.id && <button type="button" onClick={resetForm} className="flex justify-center items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm"><X style={{ width: 14, height: 14 }} /> Cancel Edit</button>}
       <button disabled={saving} className="flex justify-center items-center gap-2 rounded-xl bg-blue-700 px-3 py-2 text-white text-sm disabled:opacity-60"><Plus style={{ width: 14, height: 14 }} /> {saving ? "Saving..." : form.id ? "Update Reward" : "Save Reward"}</button>
     </form>
-    {rewards.length === 0 ? <EmptyState label="No rewards yet." /> : <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-      {rewards.map((reward) => <div key={reward.id} className="bg-white rounded-2xl p-5 border border-slate-100">
+    <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div><h2 className="text-lg font-black text-slate-950">Reward catalog</h2><p className="text-sm text-slate-500">Inactive rewards stay archived and out of the active catalog.</p></div>
+      <div className="inline-flex w-fit rounded-xl bg-slate-100 p-1">
+        <button type="button" onClick={() => setRewardView("active")} className={`rounded-lg px-3 py-2 text-xs font-black transition ${rewardView === "active" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500"}`}>Active {activeRewards.length}</button>
+        <button type="button" onClick={() => setRewardView("archived")} className={`rounded-lg px-3 py-2 text-xs font-black transition ${rewardView === "archived" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}>Archived {archivedRewards.length}</button>
+      </div>
+    </section>
+    {visibleRewards.length === 0 ? <EmptyState label={rewardView === "archived" ? "No archived rewards." : "No active rewards yet."} /> : <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      {visibleRewards.map((reward) => <div key={reward.id} className={`bg-white rounded-2xl p-5 border ${reward.is_active === false ? "border-slate-200 opacity-90" : "border-slate-100"}`}>
         {reward.image_url ? <img src={reward.image_url} alt={reward.name} className="mb-3 max-h-56 w-full rounded-xl object-contain bg-slate-100" /> : <Package className="text-blue-700 mb-3" />}
         <p className="text-xs font-black uppercase tracking-wide text-blue-600">{reward.reward_type || "Reward"}</p><h2 className="text-slate-900" style={{ fontWeight: 700 }}>{reward.name}</h2>
         <p className="text-slate-500 text-sm">{reward.description || "No description"}</p>
         <div className="flex justify-between mt-4 text-sm"><span>{reward.required_points} pts</span><span>{reward.stock_quantity} stock</span><span>{reward.is_active ? "Active" : "Inactive"}</span></div>
-        <button onClick={() => editReward(reward)} className="mt-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm"><Edit2 style={{ width: 14, height: 14 }} /> Edit</button>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button type="button" onClick={() => editReward(reward)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600"><Edit2 style={{ width: 14, height: 14 }} /> Edit</button>
+          <button type="button" disabled={archivingId === reward.id} onClick={() => toggleArchive(reward)} className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold disabled:opacity-50 ${reward.is_active === false ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700"}`}>{reward.is_active === false ? <RotateCcw size={14} /> : <Archive size={14} />} {archivingId === reward.id ? "Saving..." : reward.is_active === false ? "Restore" : "Archive"}</button>
+        </div>
       </div>)}
     </div>}
     {confirmOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
