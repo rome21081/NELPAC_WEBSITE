@@ -35,9 +35,13 @@ const money = (value) =>
   })}`;
 
 const statusLabel = (status) =>
-  ({ Partial: "Verified Partial", Verified: "Verified Paid", Paid: "Pending" })[
-    status
-  ] || status;
+  ({
+    Pending: "Pending Verification",
+    Partial: "Verified Partial",
+    Verified: "Verified Paid",
+    Paid: "Pending Verification",
+    Rejected: "Rejected",
+  })[status] || status;
 
 function StatCard({ icon: Icon, label, value, color = "blue" }) {
   const colors = {
@@ -129,6 +133,7 @@ function RegistrationAnalytics({ initialTab = "events", registrationType = null 
     paymentDrafts[record.id] || {
       status: record.payment_status === "Paid" ? "Pending" : record.payment_status,
       shortfall: record.payment_shortfall || "",
+      notes: record.admin_notes || "",
     };
 
   const changePaymentDraft = (record, updates) =>
@@ -152,10 +157,10 @@ function RegistrationAnalytics({ initialTab = "events", registrationType = null 
     }
     try {
       if (kind === "event") {
-        await updateEventRegistrationPayment(record.id, draft.status, shortfall);
+        await updateEventRegistrationPayment(record.id, draft.status, shortfall, draft.notes);
         await eventsData.reload({ silent: true });
       } else if (kind === "merch") {
-        await updateMerchPreorderPayment(record.id, draft.status, shortfall);
+        await updateMerchPreorderPayment(record.id, draft.status, shortfall, draft.notes);
         await merchData.reload({ silent: true });
       } else {
         const isEvent = kind === "event-supplement";
@@ -166,6 +171,7 @@ function RegistrationAnalytics({ initialTab = "events", registrationType = null 
           record.id,
           draft.status,
           shortfall,
+          draft.notes,
         );
         if (isEvent) await eventsData.reload({ silent: true });
         else await merchData.reload({ silent: true });
@@ -243,7 +249,7 @@ function RegistrationAnalytics({ initialTab = "events", registrationType = null 
           }
           className="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs"
         >
-          <option value="Pending">Pending</option>
+          <option value="Pending">Pending Verification</option>
           <option value="Partial">Verified Partial</option>
           <option value="Verified">Verified Paid</option>
           <option value="Rejected">Rejected</option>
@@ -261,6 +267,15 @@ function RegistrationAnalytics({ initialTab = "events", registrationType = null 
             className="w-full rounded-lg border border-amber-300 px-2 py-2 text-xs"
           />
         )}
+        <textarea
+          rows="2"
+          placeholder="Admin notes"
+          value={draft.notes}
+          onChange={(event) =>
+            changePaymentDraft(record, { notes: event.target.value })
+          }
+          className="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs"
+        />
         <button
           type="button"
           onClick={() => savePayment(kind, record)}
@@ -319,6 +334,9 @@ function RegistrationAnalytics({ initialTab = "events", registrationType = null 
           </div>
           <div>
             <span className="mb-1 block text-xs text-slate-400">Status</span>
+            <span className="mb-2 inline-flex rounded-full bg-amber-50 px-2 py-1 text-[11px] font-black text-amber-700">
+              {statusLabel(record.payment_status)}
+            </span>
             {renderPaymentEditor(
               record,
               kind,
@@ -354,7 +372,7 @@ function RegistrationAnalytics({ initialTab = "events", registrationType = null 
           Submissions & Analytics
         </h1>
         <p className="text-sm text-slate-500">
-          Review grouped church submissions, payments, proofs, and reports.
+          Review payment proofs, payer details, transaction references, amounts, and reports.
         </p>
       </header>
       <ErrorState

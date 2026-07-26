@@ -72,7 +72,7 @@ function ImageGallery({ embedded = false, viewMode = "tiles" }) {
                 {selectedEvent !== "all" && <button type="button" aria-label="Clear event filter" onClick={() => setSelectedEvent("all")} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><X size={16} /></button>}
               </div>
             </div>
-            <div className="app-scrollbar mt-3 hidden gap-2 overflow-x-auto pb-1 sm:flex"><button type="button" onClick={() => setSelectedEvent("all")} className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold transition ${selectedEvent === "all" ? "bg-violet-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>All events · {approved.length}</button>{eventOptions.map((event) => <button type="button" key={event.id} onClick={() => setSelectedEvent(String(event.id))} className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold transition ${selectedEvent === String(event.id) ? "bg-violet-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{event.title} · {event.count}</button>)}</div>
+            <div className="app-scrollbar mt-3 hidden gap-2 overflow-x-auto pb-1 sm:flex"><button type="button" onClick={() => setSelectedEvent("all")} className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold transition ${selectedEvent === "all" ? "bg-violet-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>All events | {approved.length}</button>{eventOptions.map((event) => <button type="button" key={event.id} onClick={() => setSelectedEvent(String(event.id))} className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold transition ${selectedEvent === String(event.id) ? "bg-violet-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{event.title} | {event.count}</button>)}</div>
           </section>
           {visibleImages.length === 0 ? <EmptyState label="No approved images are available for this event." /> : <div
             className={
@@ -132,7 +132,6 @@ function ImageGallery({ embedded = false, viewMode = "tiles" }) {
                 )}
               </div>
             </article>
-          ))}
           ))}
         </div>}
         </>

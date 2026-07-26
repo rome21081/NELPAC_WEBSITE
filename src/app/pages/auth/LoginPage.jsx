@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router";
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../lib/authContext";
+import { signInWithGoogle } from "../../lib/oauth";
 import nelpacLogo from "../../../../NELPAC-LOGO.jpg";
 import {
   listEvents,
@@ -71,6 +72,17 @@ function LoginPage() {
     } catch (err) {
       setError(err.message || "Unable to sign in.");
     } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setSubmitting(true);
+    setError("");
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      setError(err.message || "Unable to continue with Google.");
       setSubmitting(false);
     }
   };
@@ -210,6 +222,26 @@ function LoginPage() {
             <p className="text-slate-500 mb-6" style={{ fontSize: "14px" }}>
               Sign in to access the NELPAC System
             </p>
+
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={submitting}
+              className="mb-4 flex w-full items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:opacity-60"
+            >
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white font-black text-blue-600">
+                G
+              </span>
+              Continue with Google
+            </button>
+
+            <div className="mb-4 flex items-center gap-3">
+              <div className="h-px flex-1 bg-slate-200" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                or
+              </span>
+              <div className="h-px flex-1 bg-slate-200" />
+            </div>
 
             <form onSubmit={handleLogin} className="space-y-4">
               <div>

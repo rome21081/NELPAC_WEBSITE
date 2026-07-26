@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getThemePreference, syncThemePreference } from "../../lib/themePreference";
 
 const STORAGE_KEY = "nelpac-admin-preferences";
 
@@ -17,13 +18,28 @@ function AdminSettings() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (saved) setSettings({ ...defaultSettings, ...JSON.parse(saved) });
+    try {
+      const saved = window.localStorage.getItem(STORAGE_KEY);
+      const savedSettings = saved ? JSON.parse(saved) : {};
+      const nextSettings = {
+        ...defaultSettings,
+        ...savedSettings,
+        darkMode: getThemePreference(),
+      };
+      setSettings(nextSettings);
+      syncThemePreference(nextSettings.darkMode);
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextSettings));
+    } catch {
+      syncThemePreference(defaultSettings.darkMode);
+    }
   }, []);
 
   const update = (field, value) => {
     const next = { ...settings, [field]: value };
     setSettings(next);
+    if (field === "darkMode") {
+      syncThemePreference(Boolean(value));
+    }
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     setMessage("Settings saved on this device.");
   };

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-function useSupabaseData(loader, deps = []) {
+function useSupabaseData(loader, deps = [], options = {}) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const realtimeTimer = useRef(null);
+  const { pauseRefresh = false, refreshInterval = 10000 } = options;
 
   const reload = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
@@ -24,15 +25,17 @@ function useSupabaseData(loader, deps = []) {
   }, [reload]);
 
   useEffect(() => {
+    if (pauseRefresh || !refreshInterval) return undefined;
     const fallbackRefresh = setInterval(() => {
       if (document.visibilityState === "visible" && navigator.onLine) {
         reload({ silent: true });
       }
-    }, 10000);
+    }, refreshInterval);
     return () => clearInterval(fallbackRefresh);
-  }, [reload]);
+  }, [pauseRefresh, refreshInterval, reload]);
 
   useEffect(() => {
+    if (pauseRefresh) return undefined;
     const refreshFromRealtime = () => {
       clearTimeout(realtimeTimer.current);
       realtimeTimer.current = setTimeout(() => reload({ silent: true }), 250);
@@ -42,7 +45,7 @@ function useSupabaseData(loader, deps = []) {
       clearTimeout(realtimeTimer.current);
       window.removeEventListener("nelpac:data-changed", refreshFromRealtime);
     };
-  }, [reload]);
+  }, [pauseRefresh, reload]);
 
   return { data, loading, error, reload, setData };
 }

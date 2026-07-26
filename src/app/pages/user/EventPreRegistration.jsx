@@ -5,10 +5,10 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  ExternalLink,
   MapPin,
   Plus,
   Trash2,
-  UploadCloud,
   Users,
 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router";
@@ -30,6 +30,7 @@ import {
 } from "../../lib/phoneNumbers";
 import {
   appendEventRegistrationSupplement,
+  createPaymentTransaction,
   getEvent,
   getMyMembers,
   getMyEventRegistration,
@@ -39,6 +40,10 @@ import {
   uploadPrivatePaymentProof,
   validateRegistrationDiscountVoucher,
 } from "../../lib/supabaseServices";
+import {
+  openGcashStore,
+  paymentStatusLabel,
+} from "../../lib/payments";
 import nelpacLogo from "../../../../NELPAC-LOGO.jpg";
 
 const inputClass =
@@ -89,7 +94,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null, registrat
     president_contact_number: "",
     male_delegate_count: 0,
     female_delegate_count: 0,
-    gcash_mode_of_payment: onsite ? "Cash" : "GCash",
+    gcash_mode_of_payment: "GCash",
     payment_sender_name: "",
     payment_date: "",
     reference_number: "",
@@ -138,8 +143,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null, registrat
             president_contact_number: registration.president_contact_number,
             male_delegate_count: registration.male_delegate_count,
             female_delegate_count: registration.female_delegate_count,
-            gcash_mode_of_payment:
-              registration.gcash_mode_of_payment || (onsite ? "Cash" : "GCash"),
+            gcash_mode_of_payment: registration.gcash_mode_of_payment || "GCash",
             payment_sender_name: registration.payment_sender_name || "",
             payment_date: registration.payment_date || "",
             reference_number: registration.reference_number || "",
@@ -227,6 +231,8 @@ function EventPreRegistration({ selectedEventId = null, onBack = null, registrat
   const totalPayment = totalDelegates * Number(event?.registration_fee || 0);
   const voucherDiscount = voucher ? Number(event?.registration_fee || 0) * Number(voucher.discount_percentage || 0) / 100 : 0;
   const finalPayment = Math.max(totalPayment - voucherDiscount, 0);
+  const paymentModule = onsite ? "onsite-registration" : "event-registration";
+  const paymentRequiresProof = form.gcash_mode_of_payment !== "Cash";
   const churchMembers = useMemo(
     () =>
       form.local_church_id
@@ -348,11 +354,11 @@ function EventPreRegistration({ selectedEventId = null, onBack = null, registrat
       delegates.some((delegate) => !delegate.name.trim() || delegate.age === "")
     )
       return setError("Complete every delegate row before submitting.");
-    const selectedProofFile = onsite
-      ? null
-      : proofFile || proofInputRef.current?.files?.[0] || null;
+    const selectedProofFile = paymentRequiresProof
+      ? proofFile || proofInputRef.current?.files?.[0] || null
+      : null;
     if (
-      !onsite &&
+      paymentRequiresProof &&
       !selectedProofFile &&
       (addingAnother || !existing?.proof_of_payment_url)
     )
@@ -361,7 +367,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null, registrat
       );
     setSaving(true);
     try {
-      const proofPath = !onsite && selectedProofFile
+      const proofPath = paymentRequiresProof && selectedProofFile
         ? await uploadPrivatePaymentProof(
             "registration-payment-proofs",
             selectedProofFile,
@@ -369,8 +375,10 @@ function EventPreRegistration({ selectedEventId = null, onBack = null, registrat
             eventId,
           )
         : existing?.proof_of_payment_url || null;
+      let savedRecord;
+      let sourceTable;
       if (existing?.submission_status === "Submitted" && addingAnother) {
-        await appendEventRegistrationSupplement({
+        savedRecord = await appendEventRegistrationSupplement({
           registration_id: existing.id,
           submitted_by: user.id,
           submission_details: {
@@ -390,35 +398,52 @@ function EventPreRegistration({ selectedEventId = null, onBack = null, registrat
           male_delegate_count: maleDelegateCount,
           female_delegate_count: femaleDelegateCount,
           fee_per_delegate: Number(event.registration_fee),
-          gcash_mode_of_payment: onsite ? "Cash" : form.gcash_mode_of_payment,
+          gcash_mode_of_payment: form.gcash_mode_of_payment,
           payment_sender_name: form.payment_sender_name,
           payment_date: form.payment_date || null,
           reference_number: form.reference_number || null,
-          proof_of_payment_url: onsite ? null : proofPath,
+          proof_of_payment_url: paymentRequiresProof ? proofPath : null,
           custom_field_responses: form.custom_field_responses || {},
         });
+        sourceTable = "event_registration_supplements";
       } else {
-        await submitEventRegistration({
+        savedRecord = await submitEventRegistration({
           registration: {
             ...(existing?.id ? { id: existing.id } : {}),
             event_id: eventId,
             registration_type: registrationType,
             submitted_by: user.id,
             ...form,
-            gcash_mode_of_payment: onsite ? "Cash" : form.gcash_mode_of_payment,
+            gcash_mode_of_payment: form.gcash_mode_of_payment,
             male_delegate_count: maleDelegateCount,
             female_delegate_count: femaleDelegateCount,
             payment_date: form.payment_date || null,
             reference_number: form.reference_number || null,
-            proof_of_payment_url: onsite ? null : proofPath,
+            proof_of_payment_url: paymentRequiresProof ? proofPath : null,
             amount_paid: 0,
           },
           delegates,
         });
+        sourceTable = "event_registrations";
       }
+      await createPaymentTransaction({
+        module: paymentModule,
+        source_table: sourceTable,
+        source_id: savedRecord.id,
+        submitted_by: user.id,
+        amount: voucher ? finalPayment : totalPayment,
+        payer_name: form.payment_sender_name,
+        transaction_reference: form.reference_number,
+        payment_date: form.payment_date || null,
+        proof_bucket: "registration-payment-proofs",
+        proof_path: paymentRequiresProof ? proofPath : null,
+      });
       await clearFormDraft(draftKey);
       setAddingAnother(false);
       setSuccess(true);
+      navigate(
+        `/user/payment-confirmation?module=${paymentModule}&source=${encodeURIComponent(eventId)}&status=${encodeURIComponent(paymentStatusLabel("Pending"))}`,
+      );
     } catch (err) {
       setError(err.message || "Unable to submit registration.");
     } finally {
@@ -449,7 +474,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null, registrat
         <button
           type="button"
           onClick={() => {
-            setSuccess(false);
+            setSuccess(true);
             setAddingAnother(true);
             setDelegates([]);
             setExpandedDelegate(null);
@@ -900,7 +925,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null, registrat
             }
           />
 
-          {!onsite && (event.registration_gcash_recipient_name ||
+          {(event.registration_gcash_recipient_name ||
             event.registration_gcash_number) && (
             <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm sm:p-7">
               <p className="text-xs font-black uppercase tracking-wide text-emerald-700">
@@ -939,11 +964,10 @@ function EventPreRegistration({ selectedEventId = null, onBack = null, registrat
                 />
               </label>
               <label className="text-sm font-semibold text-slate-700">
-                {onsite ? "Mode of Payment: Cash" : "GCash Mode of Payment"}
+                Mode of Payment
                 <input
                   required
-                  readOnly={onsite}
-                  value={onsite ? "Cash" : form.gcash_mode_of_payment}
+                  value={form.gcash_mode_of_payment}
                   onChange={(e) =>
                     setForm((f) => ({
                       ...f,
@@ -953,6 +977,17 @@ function EventPreRegistration({ selectedEventId = null, onBack = null, registrat
                   className={inputClass}
                 />
               </label>
+              {paymentRequiresProof && (
+                <div className="sm:col-span-2">
+                  <button
+                    type="button"
+                    onClick={openGcashStore}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-extrabold text-white hover:bg-emerald-800"
+                  >
+                    <ExternalLink size={17} /> Open GCash
+                  </button>
+                </div>
+              )}
               <label className="text-sm font-semibold text-slate-700">
                 Payment Sender Name
                 <input
@@ -992,7 +1027,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null, registrat
                   className={inputClass}
                 />
               </label>
-              {!onsite && <div className="sm:col-span-2">
+              {paymentRequiresProof && <div className="sm:col-span-2">
                 <p className="text-sm font-semibold text-slate-700">
                   Proof of Payment
                 </p>

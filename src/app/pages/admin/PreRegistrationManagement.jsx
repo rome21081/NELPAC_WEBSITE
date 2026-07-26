@@ -20,17 +20,51 @@ const defaultGuide =
 const inputClass =
   "mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100";
 
+function settingsFromEvent(event, onsite) {
+  const formConfig = onsite
+    ? event.onsite_registration_form_config
+    : event.registration_form_config;
+
+  return {
+    pre_registration_enabled: Boolean(
+      onsite
+        ? event.onsite_registration_enabled
+        : event.pre_registration_enabled,
+    ),
+    pre_registration_slug:
+      (onsite
+        ? event.onsite_registration_slug
+        : event.pre_registration_slug) || "",
+    onsite_registration_mode: event.onsite_registration_mode || "Automatic",
+    registration_fee: event.registration_fee || 0,
+    registration_deadline: event.registration_deadline?.slice(0, 16) || "",
+    registration_guide:
+      (onsite
+        ? event.onsite_registration_guide
+        : event.registration_guide) || defaultGuide,
+    registration_gcash_details: event.registration_gcash_details || "",
+    registration_gcash_recipient_name:
+      event.registration_gcash_recipient_name || "",
+    registration_gcash_number: event.registration_gcash_number || "",
+    section_one_title:
+      formConfig?.section_one_title || "Church and delegate information",
+    section_two_title: formConfig?.section_two_title || "Payment details",
+    custom_sections: formConfig?.custom_sections || [],
+  };
+}
+
 function PreRegistrationManagement({ onsite = false }) {
   const [params, setParams] = useSearchParams();
+  const [selectedId, setSelectedId] = useState(params.get("event") || "");
+  const [settings, setSettings] = useState(null);
+  const [isDirty, setIsDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
   const {
     data: events,
     loading,
     error,
     reload,
-  } = useSupabaseData(() => listEvents(), []);
-  const [selectedId, setSelectedId] = useState(params.get("event") || "");
-  const [settings, setSettings] = useState(null);
-  const [saving, setSaving] = useState(false);
+  } = useSupabaseData(() => listEvents(), [], { pauseRefresh: isDirty || saving });
   const [message, setMessage] = useState("");
   const selectedEvent = useMemo(
     () => events.find((event) => event.id === selectedId),
@@ -42,45 +76,28 @@ function PreRegistrationManagement({ onsite = false }) {
       setSettings(null);
       return;
     }
-    setSettings({
-      pre_registration_enabled: Boolean(onsite ? selectedEvent.onsite_registration_enabled : selectedEvent.pre_registration_enabled),
-      pre_registration_slug: (onsite ? selectedEvent.onsite_registration_slug : selectedEvent.pre_registration_slug) || "",
-      onsite_registration_mode: selectedEvent.onsite_registration_mode || "Automatic",
-      registration_fee: selectedEvent.registration_fee || 0,
-      registration_deadline:
-        selectedEvent.registration_deadline?.slice(0, 16) || "",
-      registration_guide: (onsite ? selectedEvent.onsite_registration_guide : selectedEvent.registration_guide) || defaultGuide,
-      registration_gcash_details:
-        selectedEvent.registration_gcash_details || "",
-      registration_gcash_recipient_name:
-        selectedEvent.registration_gcash_recipient_name || "",
-      registration_gcash_number:
-        selectedEvent.registration_gcash_number || "",
-      section_one_title:
-        (onsite ? selectedEvent.onsite_registration_form_config : selectedEvent.registration_form_config)?.section_one_title ||
-        "Church and delegate information",
-      section_two_title:
-        (onsite ? selectedEvent.onsite_registration_form_config : selectedEvent.registration_form_config)?.section_two_title ||
-        "Payment details",
-      custom_sections:
-        (onsite ? selectedEvent.onsite_registration_form_config : selectedEvent.registration_form_config)?.custom_sections || [],
-    });
-  }, [onsite, selectedEvent]);
+    if (isDirty) return;
+    setSettings(settingsFromEvent(selectedEvent, onsite));
+  }, [isDirty, onsite, selectedEvent]);
 
   const chooseEvent = (eventId) => {
     setSelectedId(eventId);
     setParams({ type: onsite ? "onsite" : "registration", event: eventId });
+    setIsDirty(false);
     setMessage("");
   };
 
-  const update = (field, value) =>
+  const update = (field, value) => {
+    setIsDirty(true);
+    setMessage("");
     setSettings((current) => ({ ...current, [field]: value }));
+  };
 
   const save = async (submitEvent) => {
     submitEvent.preventDefault();
     setMessage("");
     if (
-      !onsite && settings.pre_registration_enabled &&
+      settings.pre_registration_enabled &&
       (!settings.registration_gcash_recipient_name.trim() ||
         !settings.registration_gcash_number.trim())
     ) {
@@ -104,11 +121,14 @@ function PreRegistrationManagement({ onsite = false }) {
         .trim()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "");
-      await updateEventPreRegistration(selectedId, onsite ? {
+      const savedEvent = await updateEventPreRegistration(selectedId, onsite ? {
         onsite_registration_enabled: settings.pre_registration_enabled,
         onsite_registration_mode: settings.onsite_registration_mode,
         onsite_registration_slug: settings.pre_registration_enabled ? settings.pre_registration_slug || `${generatedSlug}-onsite` : null,
         registration_fee: Number(settings.registration_fee || 0),
+        registration_gcash_details: settings.registration_gcash_details || null,
+        registration_gcash_recipient_name: settings.registration_gcash_recipient_name || null,
+        registration_gcash_number: settings.registration_gcash_number || null,
         onsite_registration_guide: settings.registration_guide,
         onsite_registration_form_config: {
           section_one_title: settings.section_one_title,
@@ -131,6 +151,8 @@ function PreRegistrationManagement({ onsite = false }) {
           },
         });
       await reload();
+      setSettings(settingsFromEvent(savedEvent, onsite));
+      setIsDirty(false);
       setMessage(`${onsite ? "Onsite registration" : "Pre-registration"} settings saved for this event.`);
     } catch (saveError) {
       setMessage(
@@ -270,14 +292,14 @@ function PreRegistrationManagement({ onsite = false }) {
                     <input className={inputClass} placeholder="Generated from event title" value={settings.pre_registration_slug} onChange={(event) => update("pre_registration_slug", event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} />
                   </label>
                   <div className="hidden sm:block" />
-                  {!onsite && <label className="text-sm font-semibold text-slate-700">
+                  <label className="text-sm font-semibold text-slate-700">
                     Name of the GCash Recipient
                     <input className={inputClass} value={settings.registration_gcash_recipient_name} onChange={(event) => update("registration_gcash_recipient_name", event.target.value)} />
-                  </label>}
-                  {!onsite && <label className="text-sm font-semibold text-slate-700">
+                  </label>
+                  <label className="text-sm font-semibold text-slate-700">
                     GCash Number
                     <input inputMode="numeric" className={inputClass} value={settings.registration_gcash_number} onChange={(event) => update("registration_gcash_number", event.target.value)} />
-                  </label>}
+                  </label>
                   <label className="text-sm font-semibold text-slate-700">
                     Section 1 Title
                     <input className={inputClass} value={settings.section_one_title} onChange={(event) => update("section_one_title", event.target.value)} />

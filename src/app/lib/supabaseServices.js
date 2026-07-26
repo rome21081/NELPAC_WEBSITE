@@ -544,6 +544,7 @@ async function updateSupplementPayment(
   id,
   paymentStatus,
   paymentShortfall = 0,
+  adminNotes = null,
 ) {
   const allowedTables = [
     "event_registration_supplements",
@@ -556,6 +557,7 @@ async function updateSupplementPayment(
       payment_status: paymentStatus,
       payment_shortfall:
         paymentStatus === "Partial" ? Number(paymentShortfall) : 0,
+      admin_notes: adminNotes,
     })
     .eq("id", id)
     .select("*")
@@ -592,6 +594,30 @@ async function createPaymentProofSignedUrl(bucket, path) {
     .createSignedUrl(path, 600);
   if (error) throw error;
   return data.signedUrl;
+}
+
+async function createPaymentTransaction(payload) {
+  const { data, error } = await requireSupabase()
+    .from("payment_transactions")
+    .insert({
+      provider: payload.provider || "manual-gcash",
+      module: payload.module,
+      source_table: payload.source_table,
+      source_id: payload.source_id,
+      submitted_by: payload.submitted_by,
+      amount: Number(payload.amount || 0),
+      payer_name: payload.payer_name || null,
+      transaction_reference: payload.transaction_reference || null,
+      payment_date: payload.payment_date || null,
+      proof_bucket: payload.proof_bucket,
+      proof_path: payload.proof_path || null,
+      status: payload.status || "Pending",
+      gateway_payload: payload.gateway_payload || {},
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
 }
 
 async function listEvaluationDetails() {
@@ -1101,6 +1127,7 @@ export {
   uploadStorageImage,
   uploadPrivatePaymentProof,
   createPaymentProofSignedUrl,
+  createPaymentTransaction,
   updateEventRegistrationPayment,
   updateEventPreRegistration,
   updateMerchPreorderPayment,

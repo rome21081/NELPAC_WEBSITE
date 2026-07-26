@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { ClipboardPenLine, Edit2, ExternalLink, Plus, X } from "lucide-react";
+import { Link } from "react-router";
+import { CalendarCheck2, ClipboardPenLine, Edit2, ExternalLink, Plus, X } from "lucide-react";
 import { EmptyState, ErrorState, LoadingState } from "../../components/DataState";
 import { useAuth } from "../../lib/authContext";
 import { useSupabaseData } from "../../lib/useSupabaseData";
 import { listEvents, saveEvent, uploadStorageImage } from "../../lib/supabaseServices";
 
-const emptyForm = { title: "", description: "", event_date: "", venue: "", status: "Draft", evaluation_enabled: true, image_url: "", pre_registration_enabled: false, pre_registration_slug: "", registration_fee: 0, registration_deadline: "", registration_guide: "Registration must be filled out by one representative only, preferably the Local Church President.", registration_gcash_details: "", section_one_title: "Church and delegate information", section_two_title: "Payment details", custom_sections: [] };
+const emptyForm = { title: "", description: "", event_date: "", venue: "", status: "Draft", evaluation_enabled: true, image_url: "", pre_registration_enabled: false, pre_registration_slug: "", registration_fee: 0, registration_deadline: "", registration_guide: "Registration must be filled out by one representative only, preferably the Local Church President.", registration_gcash_details: "", section_one_title: "Church and delegate information", section_two_title: "Payment details", custom_sections: [], onsite_registration_enabled: false, onsite_registration_mode: "Automatic", onsite_registration_slug: "", onsite_registration_guide: "Registration must be filled out by one representative only, preferably the Local Church President." };
 
 function EventsManagement() {
   const { profile } = useAuth();
@@ -48,6 +49,10 @@ function EventsManagement() {
       section_one_title: event.registration_form_config?.section_one_title || emptyForm.section_one_title,
       section_two_title: event.registration_form_config?.section_two_title || emptyForm.section_two_title,
       custom_sections: event.registration_form_config?.custom_sections || [],
+      onsite_registration_enabled: Boolean(event.onsite_registration_enabled),
+      onsite_registration_mode: event.onsite_registration_mode || "Automatic",
+      onsite_registration_slug: event.onsite_registration_slug || "",
+      onsite_registration_guide: event.onsite_registration_guide || emptyForm.onsite_registration_guide,
       created_by: event.created_by || profile.id,
     });
     setImageFile(null);
@@ -64,10 +69,17 @@ function EventsManagement() {
       const generatedSlug = form.title.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
       await saveEvent({
         ...eventForm,
+        pre_registration_enabled: Boolean(form.pre_registration_enabled),
         pre_registration_slug: form.pre_registration_enabled ? (form.pre_registration_slug || generatedSlug) : null,
         registration_deadline: form.registration_deadline || null,
         registration_fee: Number(form.registration_fee || 0),
+        registration_guide: form.registration_guide || emptyForm.registration_guide,
         registration_form_config: { section_one_title, section_two_title, custom_sections },
+        onsite_registration_enabled: Boolean(form.onsite_registration_enabled),
+        onsite_registration_mode: form.onsite_registration_mode || "Automatic",
+        onsite_registration_slug: form.onsite_registration_enabled ? (form.onsite_registration_slug || `${generatedSlug}-onsite`) : null,
+        onsite_registration_guide: form.onsite_registration_guide || emptyForm.onsite_registration_guide,
+        onsite_registration_form_config: { section_one_title, section_two_title, custom_sections },
         image_url: imageUrl || null,
         created_by: form.created_by || profile.id,
       });
@@ -124,8 +136,9 @@ function EventsManagement() {
       </select>
       <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={form.evaluation_enabled} onChange={(e) => setForm((f) => ({ ...f, evaluation_enabled: e.target.checked }))} /> Evaluation enabled</label>
       <label className="md:col-span-3 flex items-center justify-between gap-4 rounded-2xl border border-blue-200 bg-blue-50 p-4"><span><strong className="block text-sm text-blue-950">Open Pre-Registration</strong><span className="text-xs text-blue-700">Enable delegate registration for this event. Configure its fee, deadline, sections, and payment details separately in the Forms Center after saving the event.</span></span><input type="checkbox" className="h-5 w-5 accent-blue-700" checked={form.pre_registration_enabled} onChange={(e) => setForm((f) => ({ ...f, pre_registration_enabled: e.target.checked }))} /></label>
+      <label className="md:col-span-3 flex items-center justify-between gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><span><strong className="block text-sm text-emerald-950">Open Onsite Registration</strong><span className="text-xs text-emerald-700">Allow first-day cash registration for this event and make it visible immediately after saving.</span></span><input type="checkbox" className="h-5 w-5 accent-emerald-700" checked={form.onsite_registration_enabled} onChange={(e) => setForm((f) => ({ ...f, onsite_registration_enabled: e.target.checked }))} /></label>
       {form.id && <button type="button" onClick={resetForm} className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm"><X style={{ width: 14, height: 14 }} /> Cancel Edit</button>}
-      <button disabled={saving} className="flex items-center justify-center gap-2 rounded-xl bg-blue-700 text-white px-4 py-2 text-sm disabled:opacity-60"><Plus style={{ width: 14, height: 14 }} /> {saving ? "Saving..." : form.id ? "Update Event" : "Save Event"}</button>
+      <button type="submit" disabled={saving} className="flex items-center justify-center gap-2 rounded-xl bg-blue-700 text-white px-4 py-2 text-sm disabled:opacity-60"><Plus style={{ width: 14, height: 14 }} /> {saving ? "Saving..." : form.id ? "Update Event" : "Save Event"}</button>
     </form>
     {events.length === 0 ? <EmptyState label="No events yet." /> : <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {events.map((event) => <div key={event.id} className="bg-white rounded-2xl p-5 border border-slate-100">
@@ -136,7 +149,8 @@ function EventsManagement() {
         <div className="mt-4 flex flex-wrap gap-2">
           <button onClick={() => editEvent(event)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm"><Edit2 style={{ width: 14, height: 14 }} /> Edit</button>
           <button disabled={saving} onClick={() => toggleEvaluation(event)} className={`rounded-xl px-3 py-2 text-sm ${event.evaluation_enabled ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{event.evaluation_enabled ? "Evaluation Open" : "Evaluation Closed"}</button>
-          {event.pre_registration_enabled && <><span className="inline-flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700"><ClipboardPenLine size={14} /> ₱{Number(event.registration_fee).toLocaleString()}</span><a href={`/admin/forms?type=registration&event=${event.id}`} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-3 py-2 text-sm text-white"><Edit2 size={14} /> Configure Form</a><a href={`/user/forms?type=registration&event=${event.id}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-3 py-2 text-sm text-blue-700"><ExternalLink size={14} /> View Form</a></>}
+          {event.pre_registration_enabled && <><span className="inline-flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700"><ClipboardPenLine size={14} /> Pre-Reg ₱{Number(event.registration_fee).toLocaleString()}</span><Link to={`/admin/forms?type=registration&event=${event.id}`} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-3 py-2 text-sm text-white"><Edit2 size={14} /> Configure Pre-Reg</Link><Link to={`/user/forms?type=registration&event=${event.id}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-3 py-2 text-sm text-blue-700"><ExternalLink size={14} /> View Pre-Reg</Link></>}
+          {event.onsite_registration_enabled && <><span className="inline-flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700"><CalendarCheck2 size={14} /> Onsite {event.onsite_registration_mode || "Automatic"}</span><Link to={`/admin/forms?type=onsite&event=${event.id}`} className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-3 py-2 text-sm text-white"><Edit2 size={14} /> Configure Onsite</Link><Link to={`/user/forms?type=onsite&event=${event.id}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 px-3 py-2 text-sm text-emerald-700"><ExternalLink size={14} /> View Onsite</Link></>}
         </div>
       </div>)}
     </div>}

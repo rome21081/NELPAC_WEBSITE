@@ -27,6 +27,7 @@ import { LocalChurchMembers } from "./pages/user/LocalChurchMembers";
 import { UserSettings } from "./pages/user/UserSettings";
 import { UserMerchPreorders } from "./pages/user/UserMerchPreorders";
 import { UnifiedForms } from "./pages/user/UnifiedForms";
+import { PaymentConfirmation } from "./pages/user/PaymentConfirmation";
 function LegacyEventFormRedirect() {
   const { eventId } = useParams();
   return createElement(Navigate, {
@@ -100,6 +101,7 @@ const router = createBrowserRouter([
       { path: "local-church-members", Component: LocalChurchMembers },
       { path: "events", Component: UserCommunity },
       { path: "forms", Component: UnifiedForms },
+      { path: "payment-confirmation", Component: PaymentConfirmation },
       { path: "events/:eventId/register", Component: LegacyEventFormRedirect },
       { path: "merch-preorders", Component: UserMerchPreorders },
       { path: "merch-preorders/:formId", Component: LegacyMerchFormRedirect },

@@ -2,11 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
+  ExternalLink,
   Maximize2,
   Plus,
   Shirt,
   Trash2,
-  UploadCloud,
 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ErrorState, LoadingState } from "../../components/DataState";
@@ -28,6 +28,7 @@ import {
 } from "../../lib/phoneNumbers";
 import {
   appendMerchPreorderSupplement,
+  createPaymentTransaction,
   getMerchForm,
   getMyMembers,
   getMyMerchPreorder,
@@ -35,6 +36,10 @@ import {
   submitMerchPreorder,
   uploadPrivatePaymentProof,
 } from "../../lib/supabaseServices";
+import {
+  openGcashStore,
+  paymentStatusLabel,
+} from "../../lib/payments";
 import nelpacLogo from "../../../../NELPAC-LOGO.jpg";
 
 const sizes = ["XS", "S", "M", "L", "XL", "XXL"];
@@ -326,8 +331,10 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
               })),
             )
           : [];
+      let savedRecord;
+      let sourceTable;
       if (existing?.submission_status === "Submitted" && addingAnother) {
-        await appendMerchPreorderSupplement({
+        savedRecord = await appendMerchPreorderSupplement({
           preorder_id: existing.id,
           submitted_by: user.id,
           submission_details: {
@@ -349,8 +356,9 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
           proof_of_payment_url: proofPath,
           custom_field_responses: form.custom_field_responses || {},
         });
+        sourceTable = "merch_preorder_supplements";
       } else {
-        await submitMerchPreorder({
+        savedRecord = await submitMerchPreorder({
           preorder: {
             ...(existing?.id ? { id: existing.id } : {}),
             form_id: formId,
@@ -364,10 +372,26 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
           },
           shirtItems,
         });
+        sourceTable = "merch_preorders";
       }
+      await createPaymentTransaction({
+        module: "merch-preorder",
+        source_table: sourceTable,
+        source_id: savedRecord.id,
+        submitted_by: user.id,
+        amount: totalPayment,
+        payer_name: form.payment_sender_name,
+        transaction_reference: form.reference_number,
+        payment_date: form.payment_date || null,
+        proof_bucket: "merch-payment-proofs",
+        proof_path: proofPath,
+      });
       await clearFormDraft(draftKey);
       setAddingAnother(false);
       setSuccess(true);
+      navigate(
+        `/user/payment-confirmation?module=merch-preorder&source=${encodeURIComponent(formId)}&status=${encodeURIComponent(paymentStatusLabel("Pending"))}`,
+      );
     } catch (err) {
       setError(err.message || "Unable to submit pre-order.");
     } finally {
@@ -819,6 +843,17 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
                 className={inputClass}
               />
             </label>
+            {form.gcash_mode_of_payment !== "Cash" && (
+              <div className="sm:col-span-2">
+                <button
+                  type="button"
+                  onClick={openGcashStore}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-extrabold text-white hover:bg-emerald-800"
+                >
+                  <ExternalLink size={17} /> Open GCash
+                </button>
+              </div>
+            )}
             <label className="text-sm font-semibold">
               Payment Sender Name
               <input

@@ -581,8 +581,8 @@ function MerchPreordersManagement() {
                     gcash_number: event.target.value,
                   }))
                 }
-              />
-            </label>
+                />
+              </label>
           </div>
         </div>
 

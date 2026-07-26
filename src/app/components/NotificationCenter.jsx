@@ -101,7 +101,7 @@ function NotificationCenter({
   };
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative z-[120]">
       <button
         type="button"
         onClick={toggle}
@@ -125,7 +125,7 @@ function NotificationCenter({
 
       {open && (
         <section
-          className="fixed right-2 top-16 z-[70] flex max-h-[min(34rem,calc(100vh-5rem))] w-[calc(100vw-1rem)] max-w-sm flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/15 sm:absolute sm:right-0 sm:top-full sm:mt-3 sm:w-96"
+          className="fixed right-2 top-16 z-[120] flex max-h-[min(34rem,calc(100vh-5rem))] w-[calc(100vw-1rem)] max-w-sm flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/15 sm:right-5 sm:w-96"
           aria-label="Notification panel"
         >
           <header className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3.5">

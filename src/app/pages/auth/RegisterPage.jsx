@@ -10,6 +10,7 @@ import {
   philippineMobileInputProps,
 } from "../../lib/phoneNumbers";
 import { supabase } from "../../lib/supabaseClient";
+import { signInWithGoogle } from "../../lib/oauth";
 import nelpacLogo from "../../../../NELPAC-LOGO.jpg";
 import {
   checkRegistrationIdentity,
@@ -319,6 +320,17 @@ function RegisterPage() {
     else submitRegistration();
   };
 
+  const handleGoogleSignIn = async () => {
+    setSubmitting(true);
+    setMessage("");
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      setMessage(error.message || "Unable to continue with Google.");
+      setSubmitting(false);
+    }
+  };
+
   const inputClass =
     "w-full px-4 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-sm outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all bg-slate-50";
   const labelClass = "block text-slate-700 mb-1";
@@ -412,6 +424,26 @@ function RegisterPage() {
                 )}
               </div>
             ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleGoogleSignIn}
+            disabled={submitting}
+            className="mb-5 flex w-full items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:opacity-60"
+          >
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white font-black text-blue-600">
+              G
+            </span>
+            Continue with Google
+          </button>
+
+          <div className="mb-5 flex items-center gap-3">
+            <div className="h-px flex-1 bg-slate-200" />
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              or register manually
+            </span>
+            <div className="h-px flex-1 bg-slate-200" />
           </div>
 
           {step === 0 && (

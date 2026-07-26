@@ -267,7 +267,7 @@ function AdminLayout() {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {/* Top Navbar */}
         <header
-          className="flex min-h-16 flex-shrink-0 items-center gap-3 border-b border-slate-200/80 bg-white/95 px-3 shadow-sm backdrop-blur sm:px-5 lg:px-7"
+          className="relative z-[90] flex min-h-16 flex-shrink-0 items-center gap-3 border-b border-slate-200/80 bg-white/95 px-3 shadow-sm backdrop-blur sm:px-5 lg:px-7"
           style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}
         >
           <button
