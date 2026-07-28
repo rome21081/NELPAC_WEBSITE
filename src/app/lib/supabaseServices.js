@@ -291,7 +291,7 @@ async function listEventRegistrations() {
     requireSupabase()
       .from("event_registrations")
       .select(
-        "*, events(title, description, event_date, venue, image_url, registration_form_config, onsite_registration_form_config), local_churches(name, district), profiles(full_name, name, email), event_registration_delegates(*), event_registration_supplements(*)",
+        "*, events(title, description, event_date, venue, image_url, registration_form_config, onsite_registration_form_config), local_churches(name, district), profiles!event_registrations_submitted_by_fkey(full_name, name, email), event_registration_delegates(*), event_registration_supplements(*)",
       )
       .order("created_at", { ascending: false }),
   );
@@ -494,7 +494,7 @@ async function listMerchPreorders() {
     requireSupabase()
       .from("merch_preorders")
       .select(
-        "*, merch_preorder_forms(title, description, preorder_date, image_url, merch_type, custom_merch_name, form_config), local_churches(name, district), profiles(full_name, name, email), merch_shirt_order_items(*), merch_preorder_supplements(*)",
+        "*, merch_preorder_forms(title, description, preorder_date, image_url, merch_type, custom_merch_name, form_config), local_churches(name, district), profiles!merch_preorders_submitted_by_fkey(full_name, name, email), merch_shirt_order_items(*), merch_preorder_supplements(*)",
       )
       .order("created_at", { ascending: false }),
   );
