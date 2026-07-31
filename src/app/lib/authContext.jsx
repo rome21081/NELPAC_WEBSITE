@@ -73,6 +73,15 @@ async function fetchProfile(user) {
   return ensuredProfile || buildFallbackProfile(user);
 }
 
+async function fetchProfileSafely(user) {
+  try {
+    return await fetchProfile(user);
+  } catch (error) {
+    console.warn("Unable to load profile", error);
+    return buildFallbackProfile(user);
+  }
+}
+
 function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -92,7 +101,7 @@ function AuthProvider({ children }) {
 
       const currentSession = data.session;
       const currentProfile = currentSession?.user
-        ? await fetchProfile(currentSession.user)
+        ? await fetchProfileSafely(currentSession.user)
         : null;
       if (alive) {
         setSession(currentSession);
@@ -112,12 +121,8 @@ function AuthProvider({ children }) {
           return;
         }
 
-        fetchProfile(nextSession.user)
+        fetchProfileSafely(nextSession.user)
           .then(setProfile)
-          .catch((error) => {
-            console.error("Unable to load profile", error);
-            setProfile(null);
-          })
           .finally(() => setLoading(false));
       },
     );
@@ -148,7 +153,7 @@ function AuthProvider({ children }) {
         (payload.new?.id === session.user.id ||
           payload.old?.id === session.user.id)
       ) {
-        fetchProfile(session.user).then(setProfile).catch(console.error);
+        fetchProfileSafely(session.user).then(setProfile);
       }
     };
 
@@ -178,7 +183,7 @@ function AuthProvider({ children }) {
       profile,
       loading,
       refreshProfile: async () => {
-        const nextProfile = await fetchProfile(session?.user);
+        const nextProfile = await fetchProfileSafely(session?.user);
         setProfile(nextProfile);
         return nextProfile;
       },
