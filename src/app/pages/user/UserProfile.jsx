@@ -140,13 +140,18 @@ function UserProfile() {
         });
         avatarUrl = await uploadProfileAvatar(form.avatarFile, user.id);
       }
-      await updateMyProfile({
+      const savedProfile = await updateMyProfile({
         full_name: fullName,
         contact_number: normalizePhilippineMobile(form.contact_number),
         local_church_id: form.local_church_id,
         avatar_url: avatarUrl,
       });
-      await refreshProfile();
+      if (savedProfile.local_church_id !== form.local_church_id) {
+        throw new Error(
+          "Your profile saved, but the local church value was not stored. Please apply the latest Supabase profile migration.",
+        );
+      }
+      const refreshedProfile = await refreshProfile();
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete("completeName");
       nextParams.delete("mandatory");
@@ -159,6 +164,9 @@ function UserProfile() {
         last_name: lastName,
         avatarFile: null,
         avatar_url: avatarUrl,
+        contact_number: refreshedProfile?.contact_number || current.contact_number,
+        local_church_id:
+          refreshedProfile?.local_church_id || current.local_church_id,
       }));
       setNotice({
         type: "success",

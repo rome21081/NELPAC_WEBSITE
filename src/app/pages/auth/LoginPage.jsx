@@ -72,8 +72,12 @@ function LoginPage() {
       if (!profileData) {
         const { data: ensuredProfile, error: ensureError } =
           await supabase.rpc("ensure_my_profile");
-        if (ensureError) throw ensureError;
-        profileData = ensuredProfile;
+        if (ensureError) {
+          console.warn("Unable to ensure missing profile", ensureError);
+          profileData = { role: "user" };
+        } else {
+          profileData = ensuredProfile || { role: "user" };
+        }
       }
 
       navigate(profileData.role === "admin" ? "/admin" : "/user");

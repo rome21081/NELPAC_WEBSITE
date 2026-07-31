@@ -28,12 +28,30 @@ const realtimeTables = [
   "merch_preorder_supplements",
 ];
 
-async function fetchProfile(userId) {
+function buildFallbackProfile(user) {
+  if (!user?.id) return null;
+  const fullName =
+    user.user_metadata?.full_name || user.user_metadata?.name || "";
+  return {
+    id: user.id,
+    role: "user",
+    full_name: fullName,
+    name: user.user_metadata?.name || fullName,
+    name_completed: false,
+    email: user.email || "",
+    avatar_url: user.user_metadata?.avatar_url || null,
+    contact_number: null,
+    local_church_id: null,
+  };
+}
+
+async function fetchProfile(user) {
+  const userId = user?.id;
   if (!userId) return null;
   const selectProfile = () =>
     supabase
       .from("profiles")
-      .select("id, role, full_name, name, name_completed, email, avatar_url, contact_number, local_church_id, local_churches(name, district)")
+      .select("id, role, full_name, name, name_completed, email, avatar_url, contact_number, local_church_id")
       .eq("id", userId)
       .maybeSingle();
 
@@ -42,11 +60,17 @@ async function fetchProfile(userId) {
   if (data) return data;
 
   const { error: ensureError } = await supabase.rpc("ensure_my_profile");
-  if (ensureError) throw ensureError;
+  if (ensureError) {
+    console.warn("Unable to ensure missing profile", ensureError);
+    return buildFallbackProfile(user);
+  }
 
   const { data: ensuredProfile, error: ensuredError } = await selectProfile();
-  if (ensuredError) throw ensuredError;
-  return ensuredProfile;
+  if (ensuredError) {
+    console.warn("Unable to reload ensured profile", ensuredError);
+    return buildFallbackProfile(user);
+  }
+  return ensuredProfile || buildFallbackProfile(user);
 }
 
 function AuthProvider({ children }) {
@@ -68,7 +92,7 @@ function AuthProvider({ children }) {
 
       const currentSession = data.session;
       const currentProfile = currentSession?.user
-        ? await fetchProfile(currentSession.user.id)
+        ? await fetchProfile(currentSession.user)
         : null;
       if (alive) {
         setSession(currentSession);
@@ -88,7 +112,7 @@ function AuthProvider({ children }) {
           return;
         }
 
-        fetchProfile(nextSession.user.id)
+        fetchProfile(nextSession.user)
           .then(setProfile)
           .catch((error) => {
             console.error("Unable to load profile", error);
@@ -124,7 +148,7 @@ function AuthProvider({ children }) {
         (payload.new?.id === session.user.id ||
           payload.old?.id === session.user.id)
       ) {
-        fetchProfile(session.user.id).then(setProfile).catch(console.error);
+        fetchProfile(session.user).then(setProfile).catch(console.error);
       }
     };
 
@@ -154,7 +178,7 @@ function AuthProvider({ children }) {
       profile,
       loading,
       refreshProfile: async () => {
-        const nextProfile = await fetchProfile(session?.user?.id);
+        const nextProfile = await fetchProfile(session?.user);
         setProfile(nextProfile);
         return nextProfile;
       },

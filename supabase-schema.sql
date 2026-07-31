@@ -491,6 +491,10 @@ begin
   where id = auth.uid()
   returning * into updated_profile;
 
+  if updated_profile.id is null then
+    raise exception 'PROFILE_NOT_FOUND';
+  end if;
+
   if p_local_church_id is not null then
     update public.local_church_members
     set local_church_id = p_local_church_id

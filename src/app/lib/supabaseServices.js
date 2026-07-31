@@ -62,13 +62,30 @@ async function listProfiles() {
 
 async function getMyProfile(userId) {
   if (!userId) return null;
-  const { data, error } = await requireSupabase()
-    .from("profiles")
-    .select("id, role, full_name, name, name_completed, email, avatar_url, contact_number, local_church_id")
-    .eq("id", userId)
-    .maybeSingle();
+  const client = requireSupabase();
+  const selectProfile = () =>
+    client
+      .from("profiles")
+      .select("id, role, full_name, name, name_completed, email, avatar_url, contact_number, local_church_id")
+      .eq("id", userId)
+      .maybeSingle();
+
+  const { data, error } = await selectProfile();
   if (error) throw error;
-  return data;
+  if (data) return data;
+
+  const { data: ensuredProfile, error: ensureError } =
+    await client.rpc("ensure_my_profile");
+  if (ensureError) {
+    console.warn("Unable to ensure missing profile", ensureError);
+    return null;
+  }
+
+  if (ensuredProfile) return ensuredProfile;
+
+  const { data: reloadedProfile, error: reloadError } = await selectProfile();
+  if (reloadError) throw reloadError;
+  return reloadedProfile;
 }
 
 async function listLocalChurches(filters = {}) {
@@ -1023,6 +1040,7 @@ async function updateMyProfile(payload) {
     p_local_church_id: payload.local_church_id || null,
   });
   if (error) throw error;
+  if (!data) throw new Error("Unable to save profile. No profile record was returned.");
   return data;
 }
 

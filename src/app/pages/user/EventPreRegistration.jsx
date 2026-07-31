@@ -71,7 +71,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null, registrat
   const { eventId: routeEventId } = useParams();
   const eventId = selectedEventId || routeEventId;
   const onsite = registrationType === "Onsite";
-  const { user, profile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const [event, setEvent] = useState(null);
   const [churches, setChurches] = useState([]);
@@ -116,7 +116,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null, registrat
       listMyChurchMembers(),
       getMyEventRegistration(eventId, registrationType),
       getMyMembers(user.id),
-      getMyProfile(user.id),
+      refreshProfile().catch(() => getMyProfile(user.id)),
     ])
       .then(async ([eventData, churchData, memberData, registration, ownMembers, profileData]) => {
         setEvent(eventData);
@@ -235,6 +235,20 @@ function EventPreRegistration({ selectedEventId = null, onBack = null, registrat
   const selectedChurch = churches.find(
     (item) => item.id === form.local_church_id,
   );
+  const displayedDistrict = selectedChurch?.district || district;
+
+  useEffect(() => {
+    if (!profile?.local_church_id) return;
+    setForm((current) =>
+      current.local_church_id === profile.local_church_id
+        ? current
+        : { ...current, local_church_id: profile.local_church_id },
+    );
+  }, [profile?.local_church_id]);
+
+  useEffect(() => {
+    if (selectedChurch?.district) setDistrict(selectedChurch.district);
+  }, [selectedChurch?.district]);
   const maleDelegateCount = delegates.filter(
     (delegate) => delegate.gender === "Male",
   ).length;
@@ -634,7 +648,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null, registrat
                 </span>
                 <input
                   readOnly
-                  value={district || "No registered district"}
+                  value={displayedDistrict || "No registered district"}
                   className={`${inputClass} bg-slate-100 font-semibold text-slate-700`}
                 />
               </label>
