@@ -626,25 +626,39 @@ async function createPaymentProofSignedUrl(bucket, path) {
 
 async function createPaymentTransaction(payload) {
   const { data, error } = await requireSupabase()
-    .from("payment_transactions")
-    .insert({
-      provider: payload.provider || "manual-gcash",
-      module: payload.module,
-      source_table: payload.source_table,
-      source_id: payload.source_id,
-      submitted_by: payload.submitted_by,
-      amount: Number(payload.amount || 0),
-      payer_name: payload.payer_name || null,
-      transaction_reference: payload.transaction_reference || null,
-      payment_date: payload.payment_date || null,
-      proof_bucket: payload.proof_bucket,
-      proof_path: payload.proof_path || null,
-      status: payload.status || "Pending",
-      gateway_payload: payload.gateway_payload || {},
-    })
-    .select("*")
-    .single();
-  if (error) throw error;
+    .rpc("submit_payment_transaction", {
+      p_module: payload.module,
+      p_source_table: payload.source_table,
+      p_source_id: payload.source_id,
+      p_expected_amount: Number(payload.amount || 0),
+      p_payer_name: payload.payer_name || null,
+      p_transaction_reference: payload.transaction_reference || null,
+      p_payment_date: payload.payment_date || null,
+      p_proof_bucket: payload.proof_bucket || null,
+      p_proof_path: payload.proof_path || null,
+    });
+  if (error) {
+    const message = error.message || "";
+    if (message.includes("DUPLICATE_PAYMENT_REFERENCE")) {
+      throw new Error(
+        "This payment reference number has already been submitted. Please check the reference number or contact an administrator.",
+      );
+    }
+    if (message.includes("PAYMENT_AMOUNT_MISMATCH")) {
+      throw new Error(
+        "The payment amount no longer matches the saved form. Please reload and try again.",
+      );
+    }
+    if (
+      message.includes("PAYMENT_SOURCE_NOT_FOUND_OR_NOT_OWNED") ||
+      message.includes("INVALID_PROOF")
+    ) {
+      throw new Error(
+        "Unable to attach this payment to your saved submission. Please reload and try again.",
+      );
+    }
+    throw error;
+  }
   return data;
 }
 
