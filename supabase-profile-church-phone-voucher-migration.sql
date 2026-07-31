@@ -73,6 +73,61 @@ where profile.local_church_id is null
 comment on column public.profiles.local_church_id is
   'User-selected local church used as the source of truth for new member records and forms.';
 
+create or replace function public.ensure_my_profile()
+returns public.profiles
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+declare
+  ensured_profile public.profiles;
+  auth_user auth.users;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select * into auth_user
+  from auth.users
+  where id = auth.uid();
+
+  if auth_user.id is null then
+    raise exception 'Authenticated user not found';
+  end if;
+
+  insert into public.profiles (
+    id,
+    full_name,
+    name,
+    name_completed,
+    email,
+    avatar_url,
+    role
+  )
+  values (
+    auth_user.id,
+    coalesce(auth_user.raw_user_meta_data ->> 'full_name', auth_user.raw_user_meta_data ->> 'name', ''),
+    coalesce(auth_user.raw_user_meta_data ->> 'name', auth_user.raw_user_meta_data ->> 'full_name', ''),
+    false,
+    auth_user.email,
+    auth_user.raw_user_meta_data ->> 'avatar_url',
+    'user'
+  )
+  on conflict (id) do update
+  set
+    email = coalesce(public.profiles.email, excluded.email),
+    avatar_url = coalesce(public.profiles.avatar_url, excluded.avatar_url),
+    full_name = coalesce(nullif(public.profiles.full_name, ''), excluded.full_name),
+    name = coalesce(nullif(public.profiles.name, ''), excluded.name)
+  returning * into ensured_profile;
+
+  return ensured_profile;
+end;
+$$;
+
+revoke all on function public.ensure_my_profile() from public;
+grant execute on function public.ensure_my_profile() to authenticated;
+
 drop function if exists public.update_my_profile(text, text, text);
 drop function if exists public.update_my_profile(text, text, text, uuid);
 
@@ -110,6 +165,8 @@ begin
   ) then
     raise exception 'Please select an active local church';
   end if;
+
+  perform public.ensure_my_profile();
 
   update public.profiles
   set
@@ -315,32 +372,3 @@ $$;
 
 revoke all on function public.check_registration_identity(text, text) from public;
 grant execute on function public.check_registration_identity(text, text) to anon, authenticated;
-
-create or replace view public.reward_claims_with_rewards
-with (security_invoker = true)
-as
-select
-  rc.id,
-  rc.user_id,
-  rc.reward_id,
-  r.name as reward_name,
-  r.description as reward_description,
-  r.image_url as reward_image_url,
-  rc.claim_status,
-  rc.points_used,
-  rc.admin_notes,
-  rc.reviewed_by,
-  rc.reviewed_at,
-  rc.claimed_at,
-  rc.created_at,
-  rc.updated_at,
-  code.code as voucher_code,
-  code.expires_at as voucher_expires_at,
-  code.is_used as voucher_used,
-  code.used_at as voucher_used_at
-from public.reward_claims rc
-join public.rewards r on r.id = rc.reward_id
-left join public.redeem_codes code on code.claim_id = rc.id;
-
-comment on view public.reward_claims_with_rewards is
-  'Claim history with reward details and the officer-verifiable voucher generated after approval.';

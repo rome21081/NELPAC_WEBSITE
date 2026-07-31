@@ -34,6 +34,7 @@ import {
   getEvent,
   getMyMembers,
   getMyEventRegistration,
+  getMyProfile,
   listLocalChurches,
   listMyChurchMembers,
   submitEventRegistration,
@@ -115,16 +116,19 @@ function EventPreRegistration({ selectedEventId = null, onBack = null, registrat
       listMyChurchMembers(),
       getMyEventRegistration(eventId, registrationType),
       getMyMembers(user.id),
+      getMyProfile(user.id),
     ])
-      .then(async ([eventData, churchData, memberData, registration, ownMembers]) => {
+      .then(async ([eventData, churchData, memberData, registration, ownMembers, profileData]) => {
         setEvent(eventData);
         setChurches(churchData);
         setMembers(memberData);
         setExisting(registration);
+        const currentProfile = profileData || profile;
         const registeredMember =
           ownMembers.find((member) => member.review_status === "Approved") ||
           ownMembers[0];
         const registeredChurchId =
+          currentProfile?.local_church_id ||
           registration?.local_church_id ||
           registeredMember?.local_church_id ||
           "";
@@ -136,7 +140,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null, registrat
         );
         if (registration) {
           setForm({
-            local_church_id: registration.local_church_id,
+            local_church_id: registeredChurchId,
             local_church_worker: registration.local_church_worker,
             worker_contact_number: registration.worker_contact_number,
             local_church_president: registration.local_church_president,
@@ -166,12 +170,22 @@ function EventPreRegistration({ selectedEventId = null, onBack = null, registrat
 
         const savedDraft = await loadFormDraft(draftKey);
         if (savedDraft.data?.form) {
-          setForm((current) => ({ ...current, ...savedDraft.data.form }));
+          setForm((current) => ({
+            ...current,
+            ...savedDraft.data.form,
+            local_church_id:
+              currentProfile?.local_church_id ||
+              savedDraft.data.form.local_church_id ||
+              current.local_church_id,
+          }));
           setDelegates(savedDraft.data.delegates || []);
           setAddingAnother(Boolean(savedDraft.data.addingAnother));
           setExpandedDelegate(savedDraft.data.expandedDelegate ?? null);
           const draftChurch = churchData.find(
-            (item) => item.id === savedDraft.data.form.local_church_id,
+            (item) =>
+              item.id ===
+              (currentProfile?.local_church_id ||
+                savedDraft.data.form.local_church_id),
           );
           if (draftChurch) setDistrict(draftChurch.district || "");
         }
@@ -190,7 +204,7 @@ function EventPreRegistration({ selectedEventId = null, onBack = null, registrat
         setDraftReady(true);
         setLoading(false);
       });
-  }, [draftKey, eventId, onsite, registrationType, user.id]);
+  }, [draftKey, eventId, onsite, profile?.local_church_id, registrationType, user.id]);
 
   useEffect(() => {
     if (!draftReady || loading || success) return undefined;

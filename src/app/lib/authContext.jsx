@@ -30,13 +30,23 @@ const realtimeTables = [
 
 async function fetchProfile(userId) {
   if (!userId) return null;
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, role, full_name, name, name_completed, email, avatar_url, contact_number, local_church_id")
-    .eq("id", userId)
-    .single();
+  const selectProfile = () =>
+    supabase
+      .from("profiles")
+      .select("id, role, full_name, name, name_completed, email, avatar_url, contact_number, local_church_id, local_churches(name, district)")
+      .eq("id", userId)
+      .maybeSingle();
+
+  const { data, error } = await selectProfile();
   if (error) throw error;
-  return data;
+  if (data) return data;
+
+  const { error: ensureError } = await supabase.rpc("ensure_my_profile");
+  if (ensureError) throw ensureError;
+
+  const { data: ensuredProfile, error: ensuredError } = await selectProfile();
+  if (ensuredError) throw ensuredError;
+  return ensuredProfile;
 }
 
 function AuthProvider({ children }) {

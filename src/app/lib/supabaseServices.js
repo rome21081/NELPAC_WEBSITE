@@ -60,6 +60,17 @@ async function listProfiles() {
   );
 }
 
+async function getMyProfile(userId) {
+  if (!userId) return null;
+  const { data, error } = await requireSupabase()
+    .from("profiles")
+    .select("id, role, full_name, name, name_completed, email, avatar_url, contact_number, local_church_id")
+    .eq("id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 async function listLocalChurches(filters = {}) {
   let query = requireSupabase()
     .from("local_churches")
@@ -1073,6 +1084,7 @@ export {
   getMerchForm,
   getMyEventRegistration,
   getMyMerchPreorder,
+  getMyProfile,
   listAuditLogs,
   listEvents,
   listEventRegistrations,

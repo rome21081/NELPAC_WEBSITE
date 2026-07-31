@@ -61,12 +61,20 @@ function LoginPage() {
         await supabase.auth.signInWithPassword({ email, password });
       if (signInError) throw signInError;
 
-      const { data: profileData, error: profileError } = await supabase
+      const { data: existingProfile, error: profileError } = await supabase
         .from("profiles")
         .select("role")
         .eq("id", data.user.id)
-        .single();
+        .maybeSingle();
       if (profileError) throw profileError;
+
+      let profileData = existingProfile;
+      if (!profileData) {
+        const { data: ensuredProfile, error: ensureError } =
+          await supabase.rpc("ensure_my_profile");
+        if (ensureError) throw ensureError;
+        profileData = ensuredProfile;
+      }
 
       navigate(profileData.role === "admin" ? "/admin" : "/user");
     } catch (err) {

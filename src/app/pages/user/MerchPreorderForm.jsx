@@ -32,6 +32,7 @@ import {
   getMerchForm,
   getMyMembers,
   getMyMerchPreorder,
+  getMyProfile,
   listLocalChurches,
   submitMerchPreorder,
   uploadPrivatePaymentProof,
@@ -97,16 +98,21 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
       listLocalChurches({ activeOnly: true }),
       getMyMerchPreorder(formId),
       getMyMembers(user.id),
+      getMyProfile(user.id),
     ])
-      .then(async ([merchData, churchData, order, ownMembers]) => {
+      .then(async ([merchData, churchData, order, ownMembers, profileData]) => {
         setMerch(merchData);
         setChurches(churchData);
         setExisting(order);
+        const currentProfile = profileData || profile;
         const registeredMember =
           ownMembers.find((member) => member.review_status === "Approved") ||
           ownMembers[0];
         const registeredChurchId =
-          order?.local_church_id || registeredMember?.local_church_id || "";
+          currentProfile?.local_church_id ||
+          order?.local_church_id ||
+          registeredMember?.local_church_id ||
+          "";
         const registeredChurch = churchData.find(
           (item) => item.id === registeredChurchId,
         );
@@ -115,7 +121,7 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
         );
         if (order) {
           setForm({
-            local_church_id: order.local_church_id,
+            local_church_id: registeredChurchId,
             local_church_president: order.local_church_president,
             president_contact_number: order.president_contact_number,
             total_quantity: order.total_quantity,
@@ -146,11 +152,21 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
 
         const savedDraft = await loadFormDraft(draftKey);
         if (savedDraft.data?.form) {
-          setForm((current) => ({ ...current, ...savedDraft.data.form }));
+          setForm((current) => ({
+            ...current,
+            ...savedDraft.data.form,
+            local_church_id:
+              currentProfile?.local_church_id ||
+              savedDraft.data.form.local_church_id ||
+              current.local_church_id,
+          }));
           setColors(savedDraft.data.colors?.length ? savedDraft.data.colors : [newColor()]);
           setAddingAnother(Boolean(savedDraft.data.addingAnother));
           const draftChurch = churchData.find(
-            (item) => item.id === savedDraft.data.form.local_church_id,
+            (item) =>
+              item.id ===
+              (currentProfile?.local_church_id ||
+                savedDraft.data.form.local_church_id),
           );
           if (draftChurch) setDistrict(draftChurch.district || "");
         }
@@ -167,7 +183,7 @@ function MerchPreorderForm({ selectedFormId = null, onBack = null }) {
         setDraftReady(true);
         setLoading(false);
       });
-  }, [draftKey, formId, user.id]);
+  }, [draftKey, formId, profile?.local_church_id, user.id]);
 
   useEffect(() => {
     if (!draftReady || loading || success) return undefined;

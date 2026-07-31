@@ -377,6 +377,61 @@ create trigger on_auth_user_created
 after insert on auth.users
 for each row execute function public.handle_new_user();
 
+create or replace function public.ensure_my_profile()
+returns public.profiles
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+declare
+  ensured_profile public.profiles;
+  auth_user auth.users;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select * into auth_user
+  from auth.users
+  where id = auth.uid();
+
+  if auth_user.id is null then
+    raise exception 'Authenticated user not found';
+  end if;
+
+  insert into public.profiles (
+    id,
+    full_name,
+    name,
+    name_completed,
+    email,
+    avatar_url,
+    role
+  )
+  values (
+    auth_user.id,
+    coalesce(auth_user.raw_user_meta_data ->> 'full_name', auth_user.raw_user_meta_data ->> 'name', ''),
+    coalesce(auth_user.raw_user_meta_data ->> 'name', auth_user.raw_user_meta_data ->> 'full_name', ''),
+    false,
+    auth_user.email,
+    auth_user.raw_user_meta_data ->> 'avatar_url',
+    'user'
+  )
+  on conflict (id) do update
+  set
+    email = coalesce(public.profiles.email, excluded.email),
+    avatar_url = coalesce(public.profiles.avatar_url, excluded.avatar_url),
+    full_name = coalesce(nullif(public.profiles.full_name, ''), excluded.full_name),
+    name = coalesce(nullif(public.profiles.name, ''), excluded.name)
+  returning * into ensured_profile;
+
+  return ensured_profile;
+end;
+$$;
+
+revoke all on function public.ensure_my_profile() from public;
+grant execute on function public.ensure_my_profile() to authenticated;
+
 -- Safe user profile update. Users can call this instead of directly updating profiles.
 drop function if exists public.update_my_profile(text, text, text);
 drop function if exists public.update_my_profile(text, text, text, uuid);
@@ -414,6 +469,8 @@ begin
   ) then
     raise exception 'Please select an active local church';
   end if;
+
+  perform public.ensure_my_profile();
 
   update public.profiles
   set
@@ -2609,7 +2666,8 @@ group by p.id, p.full_name, p.name;
 
 comment on view public.one_card_point_balances is 'Frontend view for current NELPAC One Card balance per user.';
 
-create or replace view public.reward_claims_with_rewards
+drop view if exists public.reward_claims_with_rewards;
+create view public.reward_claims_with_rewards
 with (security_invoker = true)
 as
 select
